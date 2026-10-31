@@ -1,0 +1,9 @@
+[package]
+name = "egui-cpu"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+page.workspace = true
+egui_software_backend = { version = "0.0.2", default-features = false, features = ["std", "winit"] }
+egui = "0.33"

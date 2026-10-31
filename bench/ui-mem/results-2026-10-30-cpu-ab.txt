@@ -1,0 +1,16 @@
+1 survey direct pgdn=1.55 zoom=0.62 open=0.17
+1 survey list pgdn=0.97 zoom=0.45 open=0.12
+1 paper direct pgdn=0.98 zoom=0.14 open=0.14
+1 paper list pgdn=0.8 zoom=0.31 open=0.06
+2 survey direct pgdn=1.31 zoom=0.55 open=0.17
+2 survey list pgdn=0.92 zoom=0.45 open=0.11
+2 paper direct pgdn=0.73 zoom=0.23 open=0.14
+2 paper list pgdn=0.81 zoom=0.25 open=0.08
+3 survey direct pgdn=1.42 zoom=0.73 open=0.11
+3 survey list pgdn=1.17 zoom=0.28 open=0.17
+3 paper direct pgdn=0.89 zoom=0.3 open=0.08
+3 paper list pgdn=0.73 zoom=0.2 open=0.08
+4 survey direct pgdn=1.33 zoom=0.72 open=0.17
+4 survey list pgdn=0.86 zoom=0.27 open=0.12
+4 paper direct pgdn=0.94 zoom=0.19 open=0.08
+4 paper list pgdn=0.66 zoom=0.17 open=0.05

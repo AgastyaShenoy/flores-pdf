@@ -1,0 +1,22 @@
+[package]
+name = "flores-setup"
+version.workspace = true
+edition.workspace = true
+# packs target/<profile>/FloresPDF.exe, so build flores-pdf first
+build = "build.rs"
+
+[[bin]]
+name = "FloresPDF-Setup"
+path = "src/main.rs"
+
+[dependencies]
+miniz_oxide = "0.8.9"
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+miniz_oxide = "0.8.9"

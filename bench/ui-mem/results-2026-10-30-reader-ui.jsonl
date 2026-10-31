@@ -1,0 +1,7 @@
+{"app":"pdfreader","file":"","private_ws_mb":7.3,"commit_mb":7.9,"total_ws_mb":21.6,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}
+{"app":"pdfreader + pdf","file":"paper.pdf","private_ws_mb":10.3,"commit_mb":11.1,"total_ws_mb":26.1,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}
+{"app":"pdfreader + pdf, scrolled 150","file":"paper.pdf","private_ws_mb":13.7,"commit_mb":14.5,"total_ws_mb":29.7,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}
+{"app":"pdfreader + pdf","file":"survey.pdf","private_ws_mb":19.1,"commit_mb":20,"total_ws_mb":34.9,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}
+{"app":"pdfreader + pdf, scrolled 150","file":"survey.pdf","private_ws_mb":23.2,"commit_mb":24.1,"total_ws_mb":39.8,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}
+{"app":"pdfreader + pdf","file":"naca.pdf","private_ws_mb":18.2,"commit_mb":19.1,"total_ws_mb":33.7,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}
+{"app":"pdfreader + pdf, scrolled 150","file":"naca.pdf","private_ws_mb":18.5,"commit_mb":19.3,"total_ws_mb":34.1,"gpu_dedicated_mb":0,"gpu_shared_mb":0,"modules":37,"gpu_dlls":""}

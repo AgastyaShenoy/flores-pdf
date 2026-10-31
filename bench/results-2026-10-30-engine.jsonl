@@ -1,0 +1,12 @@
+{"file":"paper.pdf","mode":"direct","open_ms":0.6,"first_page_ms":16.9,"pages_ms":239.6,"rezoom_300dpi_ms":30.2,"tile_400_ms":6.9,"next_tile_400_ms":5.9,"tiled_100_ms":23.4,"tiled_200_ms":67.7}
+{"file":"paper.pdf","mode":"display list","open_ms":0.6,"first_page_ms":9.9,"pages_ms":144.7,"rezoom_300dpi_ms":23.3,"tile_400_ms":4.7,"next_tile_400_ms":3.4,"tiled_100_ms":12.9,"tiled_200_ms":37.7}
+{"file":"paper.pdf","pixels_off_page_pct":7.939,"max_diff_page":142,"pixels_off_tile_pct":7.479,"max_diff_tile":138}
+{"file":"survey.pdf","mode":"direct","open_ms":3.8,"first_page_ms":17.1,"pages_ms":736.1,"rezoom_300dpi_ms":32.4,"tile_400_ms":6.8,"next_tile_400_ms":5.7,"tiled_100_ms":25.8,"tiled_200_ms":72.1}
+{"file":"survey.pdf","mode":"display list","open_ms":3.6,"first_page_ms":11.3,"pages_ms":449.6,"rezoom_300dpi_ms":26.0,"tile_400_ms":4.8,"next_tile_400_ms":3.4,"tiled_100_ms":13.5,"tiled_200_ms":41.8}
+{"file":"survey.pdf","pixels_off_page_pct":10.626,"max_diff_page":139,"pixels_off_tile_pct":7.303,"max_diff_tile":158}
+{"file":"naca.pdf","mode":"direct","open_ms":2.4,"first_page_ms":33.6,"pages_ms":463.4,"rezoom_300dpi_ms":81.7,"tile_400_ms":43.8,"next_tile_400_ms":4.8,"tiled_100_ms":36.5,"tiled_200_ms":76.8}
+{"file":"naca.pdf","mode":"display list","open_ms":2.2,"first_page_ms":34.5,"pages_ms":603.0,"rezoom_300dpi_ms":135.5,"tile_400_ms":68.2,"next_tile_400_ms":7.2,"tiled_100_ms":56.9,"tiled_200_ms":125.4}
+{"file":"naca.pdf","pixels_off_page_pct":0.000,"max_diff_page":0,"pixels_off_tile_pct":0.000,"max_diff_tile":0}
+{"file":"tubemap.pdf","mode":"direct","open_ms":13.6,"first_page_ms":125.0,"pages_ms":191.4,"rezoom_300dpi_ms":210.6,"tile_400_ms":43.5,"next_tile_400_ms":35.4,"tiled_100_ms":361.7,"tiled_200_ms":993.7}
+{"file":"tubemap.pdf","mode":"display list","open_ms":14.3,"first_page_ms":138.9,"pages_ms":178.9,"rezoom_300dpi_ms":216.1,"tile_400_ms":46.8,"next_tile_400_ms":34.5,"tiled_100_ms":363.4,"tiled_200_ms":985.9}
+{"file":"tubemap.pdf","pixels_off_page_pct":0.000,"max_diff_page":0,"pixels_off_tile_pct":0.000,"max_diff_tile":0}

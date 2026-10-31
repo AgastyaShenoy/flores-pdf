@@ -1,0 +1,13 @@
+[package]
+name = "hayro-bench"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hayro = "0.8.0"
+rayon = "1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1

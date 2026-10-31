@@ -1,0 +1,11 @@
+[package]
+name = "egui-wgpu"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+page.workspace = true
+eframe = { version = "0.33", default-features = false, features = ["wgpu", "default_fonts"] }
+egui = "0.33"
+# eframe turns off wgpu's default features, so pick the Windows backend here
+wgpu = { version = "27", default-features = false, features = ["dx12"] }

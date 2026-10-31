@@ -1,0 +1,35 @@
+[package]
+name = "engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+memmap2.workspace = true
+# hayro's interpreter, plus what its renderer (vendored in src/raster) needs, with hayro's own features
+hayro-interpret = "0.8.0"
+# the type of a glyph's Unicode text
+hayro-cmap = "0.1.0"
+bytemuck = { version = "1", features = ["bytemuck_derive"] }
+fearless_simd = "1.0.0"
+kurbo = "0.13.0"
+pic-scale = { version = "0.7.9", default-features = false, features = ["neon", "rdm", "sse", "avx"] }
+rustc-hash = "2"
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "png", "u8_pipeline"] }
+# comics and pictures: versions already in the build through hayro and vello_cpu
+zune-jpeg = "0.5.15"
+png = "0.18.1"
+miniz_oxide = "0.8.9"
+# GIF and WebP pictures, CBR comics (UnRAR, built from RarLab's source; its license allows reading only),
+# and DjVu documents
+gif = "0.14.2"
+image-webp = "0.2.4"
+unrar = "0.5.8"
+djvu-rs = "0.43.0"
+# CB7 comics: LZMA and LZMA2, which 7-Zip uses unless told otherwise
+sevenz-rust2 = { version = "0.24.2", default-features = false }
+# EPUB text: Windows' fonts, outlined (the same version the app uses for its UI)
+skrifa = "0.46.2"
+
+[dev-dependencies]
+# the benchmark saves crops with vello_cpu's PNG encoder
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "png", "u8_pipeline"] }

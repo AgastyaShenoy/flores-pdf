@@ -1,0 +1,14 @@
+# Memory cost of each windowing/UI stack, measured against Sumatra.
+# Build each package on its own (`cargo build --release -p gdi`) so features don't unify across stacks.
+[workspace]
+resolver = "3"
+members = ["page", "gdi", "wgpu-clear", "egui-wgpu", "egui-glow", "egui-cpu"]
+
+[workspace.dependencies]
+page = { path = "page" }
+hayro = "0.8.0"
+winit = "0.30"
+softbuffer = "0.4.8"
+
+[profile.release]
+opt-level = 3
