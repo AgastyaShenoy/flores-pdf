@@ -1,54 +1,156 @@
-# Flores PDF
+<p align="center">
+  <img src="docs/images/icon.png" width="96" alt="Flores PDF icon">
+</p>
 
-A PDF and comic reader in Rust that aims to stay as light as Sumatra, named after the island east of Sumatra. Pages render on the CPU with [hayro](https://github.com/LaurenzV/hayro)'s interpreter and are blitted with GDI, so no graphics driver is loaded. Design notes and measurements are in [docs/architecture.md](docs/architecture.md).
+<h1 align="center">Flores PDF</h1>
 
-It opens PDFs (password-protected ones too), EPUB e-books, DjVu documents, CBZ, CBR and CB7 comics, and JPEG, PNG, GIF and WebP pictures. PDFs can be annotated (highlights, underlines, strikeouts, notes, freehand drawing, text, rectangles, ellipses, lines and arrows) and their forms filled in, and Ctrl + S saves both into the PDF itself.
+<p align="center">
+  <b>A fast, light PDF reader for Windows, written in Rust.</b><br>
+  Sumatra's speed and small footprint, with a modern interface, annotations, tabs and a true-black OLED theme.
+</p>
 
-`FloresPDF.exe` is the whole program, one file. Filling in forms and saving annotations use [PDFium](third_party/pdfium/README.md), which is built into the exe and written to `%LOCALAPPDATA%\FloresPDF` (with its license texts) the first time you fill in a form or save; reading never loads it.
+<p align="center">
+  <a href="https://github.com/AgastyaShenoy/flores-pdf/releases/latest"><img src="https://img.shields.io/github/v/release/AgastyaShenoy/flores-pdf?label=download&color=0f766e&style=for-the-badge" alt="Latest release"></a>
+  <a href="https://github.com/AgastyaShenoy/flores-pdf/releases"><img src="https://img.shields.io/github/downloads/AgastyaShenoy/flores-pdf/total?color=0f766e&style=for-the-badge" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/AgastyaShenoy/flores-pdf?style=for-the-badge" alt="MIT license"></a>
+  <br>
+  <img src="https://img.shields.io/badge/Windows-11-0078D4?logo=windows11&logoColor=white&style=for-the-badge" alt="Windows 11">
+  <img src="https://img.shields.io/badge/made%20with-Rust-B7410E?logo=rust&logoColor=white&style=for-the-badge" alt="Made with Rust">
+  <a href="https://discord.gg/3xuJY8UXKu"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white&style=for-the-badge" alt="Discord"></a>
+</p>
 
-## Install
+<p align="center">
+  <a href="https://github.com/AgastyaShenoy/flores-pdf/releases/latest"><b>⬇️ Download for Windows</b></a>
+  &nbsp;·&nbsp; <a href="#-features">Features</a>
+  &nbsp;·&nbsp; <a href="#-performance">Performance</a>
+  &nbsp;·&nbsp; <a href="#%EF%B8%8F-keyboard-and-mouse">Shortcuts</a>
+  &nbsp;·&nbsp; <a href="#-build-from-source">Build</a>
+</p>
 
-Run `FloresPDF-Setup.exe`. It installs Flores PDF for your Windows account, with no administrator rights, in `%LOCALAPPDATA%\Programs\Flores PDF`:
+<p align="center">
+  <img src="docs/images/hero.png" alt="Flores PDF with six tabs open and a paper's outline in the sidebar" width="900">
+</p>
 
-- a Start menu entry;
-- Flores PDF offered for PDF, EPUB, DjVu, CBZ, CBR and CB7 files ("Open with", and Windows' Default apps);
-- an entry in Settings › Apps › Installed apps, whose Uninstall removes all of it (and, if you say so, your settings and recent files).
+## 🌺 Why Flores PDF
 
-At the end it offers to make Flores PDF your default PDF reader. Windows doesn't let any program do that itself, so it opens Windows' Default apps page on Flores PDF, where you click "Set default". Running a newer setup over an installed copy updates it, even while it's open. `FloresPDF-Setup.exe /S` installs without asking anything.
+[SumatraPDF](https://www.sumatrapdfreader.org) proved a PDF reader can be tiny and instant. Flores PDF (named after the island east of Sumatra; *flores* is Portuguese for flowers) keeps that spirit and adds what Sumatra's interface lacks:
 
-`FloresPDF.exe` also runs on its own from any folder, without installing (put an empty `FloresPDF-settings.toml` beside it to keep its settings there).
+- **🪶 As light as Sumatra, often lighter.** It holds 20–50% less memory than Sumatra on the same files ([measured](#-performance)), opens files as fast, and zooms with less CPU. Pages are drawn on the CPU and put on screen with GDI, as Sumatra does, so no graphics driver is ever loaded into the process.
+- **✨ A modern, Windows 11-style interface.** Rounded toolbar with Fluent icons, tabs you can drag, a start page with thumbnails, a proper settings window, light, dark and true-black themes with a matching title bar.
+- **✏️ Annotations that stay in the file.** Highlight, underline, strike out, draw, add notes and text boxes, and Ctrl + S writes them into the PDF, where Acrobat, Edge and every other reader see them.
+- **🦀 Written in Rust.** Memory-safe parsing of untrusted files, and rendering spread over four threads where Sumatra uses one, so pages turn sharp sooner.
+- **📦 One file.** `FloresPDF.exe` is the whole program (13 MB, nothing beside it), or an 8 MB installer that needs no admin rights. It updates itself from GitHub releases.
+- **🔒 Private.** No accounts, no telemetry. The only request it makes is an optional check for a newer release.
 
-Download `FloresPDF-Setup.exe` (or the portable `FloresPDF.exe`) from the [latest release](https://github.com/AgastyaShenoy/flores-pdf/releases/latest).
+## 📸 Screenshots
 
-## Updates
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/start.png" alt="Start page with thumbnails of recent files"><p align="center"><b>Start page</b>: recent files with thumbnails</p></td>
+    <td width="50%"><img src="docs/images/annotate.png" alt="Annotation tools over a paper with highlights, shapes and a note"><p align="center"><b>Annotations</b>, saved into the PDF</p></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/black.png" alt="The London Tube map on a true-black theme"><p align="center"><b>Black (OLED) theme</b>: pure black, colors kept</p></td>
+    <td width="50%"><img src="docs/images/epub.png" alt="An EPUB book in sepia with the dark theme"><p align="center"><b>EPUB</b> in sepia, dark theme</p></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/images/settings.png" alt="The settings window with categories and setting cards"><p align="center"><b>Settings</b>: every option explained, applied as you change it</p></td>
+  </tr>
+</table>
 
-A few seconds after it starts, Flores PDF asks GitHub whether there's a newer release; if there is, an "Update to …" button shows in the toolbar. In an installed copy it downloads the new setup, closes, installs and opens again (after asking, and after any changes not saved). A portable copy opens the release's page. Turn the check off under Settings › System › Check for updates; nothing is sent but the request.
+## ✨ Features
 
-To publish a release: set `version` in `Cargo.toml`, build both exes (below), and attach `FloresPDF-Setup.exe` and `FloresPDF.exe`, named exactly so, to a GitHub release tagged `v` and the version (`v1.2.0`). Copies older than the tag offer it.
+### 📚 Reads
+- **PDF**, including password-protected files, through [hayro](https://github.com/LaurenzV/hayro)
+- **EPUB** e-books, laid out as pages in Georgia, with their table of contents
+- **DjVu**, with its text layer for search and selection
+- **Comics**: CBZ, CBR and CB7
+- **Pictures**: JPEG, PNG, GIF and WebP
 
-## Build and run
+### 🗂️ Getting around
+- **Tabs** in one window: drag to reorder, middle-click to close, Ctrl + Shift + T to reopen
+- **Start page** with a thumbnail of each recent file, and a Home button to get back to it
+- Every file **reopens where you left it**, with its zoom, rotation and layout; last session's tabs come back
+- **Outline sidebar**, and **bookmarks** you name yourself
+- **Links** with a preview of where they go, and Back / Forward after a jump
+- **Smooth scrolling**, a big easy-to-grab scroll bar, hold the right button and turn the wheel to zoom
+- **One page, two pages or book view**, rotation, **presentation mode** and full screen
 
-```bash
-cargo build --release -p flores-pdf
-```
+### ✏️ Annotations and forms
+- **Highlight, underline, strike out** selected text (Ctrl + H, Ctrl + U)
+- **Notes**, **text boxes**, **freehand pen**, **rectangles, ellipses, lines and arrows**, in six colors and three widths
+- **Eraser**, undo, and removing annotations that were already in the file
+- **Fill in PDF forms**: text fields, check boxes, radio buttons, drop-downs and list boxes
+- **Ctrl + S saves into the PDF itself**; Ctrl + Shift + S saves a copy. Closing with unsaved changes asks first
 
-```bash
-cargo build --release -p flores-setup
-```
+### 🔎 Text
+- **Search** with a running count of matches, highlighted as they're found
+- **Select and copy text**; double-click for a word
+- Find the selection in the document, or **search the web** for it
 
-The setup packs the `FloresPDF.exe` it finds in the same target folder, so build the app first.
+### 🎨 Looks
+- **Light, dark, black (OLED)** or follow Windows
+- **Page colors**: normal, dark (colors kept recognizable), sepia, or pure black
+- Windows 11 look throughout: Segoe UI, Fluent icons, a dark or black title bar to match
 
-```bash
-target/release/FloresPDF.exe file.pdf
-```
+### 🖨️ And the rest
+- **Print**, copy a page as an image or save it as PNG
+- **Reloads files that change** (handy with LaTeX), document properties
+- **Installer for your account only**, no admin rights; registers for PDF, EPUB, DjVu and comics; uninstalls cleanly
+- **Updates itself** from GitHub releases (can be turned off)
+- Sumatra-style **command line**: `-page`, `-zoom`, `-print-to`
 
-Rust 1.99 is pinned in `rust-toolchain.toml`. A release build takes about three minutes, since it's optimized as one unit. You can also drop files onto the window, open them with the toolbar's folder button, or pick one from the start page, which shows your recent files with a thumbnail of each one's first page. Each file opens in a tab, where you left it last time. Opening a file while Flores PDF is running adds a tab to its window instead of starting a second copy.
+## ⚡ Performance
 
-Command-line flags follow Sumatra's: `-page N` and `-zoom` with `fit-page`, `fit-width` or a percentage, for example `-zoom 150`. `-print-to "printer name"` or `-print-to-default` prints the files given and quits, without a window.
+Measured against **SumatraPDF 3.5.2** on the same machine, same window size, same files, median of three runs. All numbers and methods are in [docs/architecture.md](docs/architecture.md) §9, with the raw data in [`bench/`](bench).
 
-To make a copy that wasn't installed your default PDF reader, open the settings and use "Make Flores PDF the default…": it registers that copy the way setup does (no admin needed) and opens Windows' Default apps page, where you pick it.
+**Memory** (committed, MB; lower is better):
 
-## Controls
+| | Flores PDF | Sumatra |
+|---|---:|---:|
+| No document | **7.9** | 11.3 |
+| paper.pdf (14 pages of text) | **11.1** | 16.7 |
+| paper.pdf after scrolling through | **14.5** | 27.4 |
+| survey.pdf (144 dense pages) | **20.0** | 25.3 |
+| survey.pdf after scrolling | **24.1** | 35.5 |
+| naca.pdf (61 scanned pages) after scrolling | **19.3** | 38.3 |
+
+**CPU** (seconds of CPU time; lower is better):
+
+| | Flores PDF | Sumatra |
+|---|---:|---:|
+| Open paper.pdf | **0.14** | 0.23 |
+| Open the London Tube map | **0.25** | 0.55 |
+| Zoom in and out, paper.pdf | **0.16** | 0.30 |
+| Zoom in and out, survey.pdf | **0.36** | 0.53 |
+| 20 × Page Down, survey.pdf | 1.12 | **1.00** |
+| 10 s idle | 0 | 0 |
+
+In short: **less memory everywhere, opening and zooming as fast or faster**, and paging through costs 7–33% more CPU than Sumatra (it renders on four threads, so pages are sharp sooner). Zooming scanned pages is the one other place Sumatra is ahead. These were measured before the toolbar's newer features; the toolbar and settings cost under 1 MB.
+
+### How it stays light
+- Pages are cut into 512 px tiles, rendered by a pool of threads in order of what's on screen, and kept **compressed** in a cache with a byte budget
+- A **display list** and **glyph cache** of our own make text pages about 40% faster to draw
+- Files under 32 MB are read into memory, bigger ones mapped, like Sumatra; idle threads let go of their caches after 3 s
+- **PDFium** (for forms and saving) is built into the exe compressed and only loaded the first time you save; reading never touches it
+- The Windows segment heap hands freed memory back to Windows
+
+## 💾 Install
+
+1. Download **`FloresPDF-Setup.exe`** from the [latest release](https://github.com/AgastyaShenoy/flores-pdf/releases/latest) and run it. Windows may say the publisher is unknown, since it isn't code-signed: choose *More info*, then *Run anyway*.
+2. It installs for your account only (no admin rights) in `%LOCALAPPDATA%\Programs\Flores PDF`, with a Start menu entry, and registers Flores PDF for PDF, EPUB, DjVu, CBZ, CBR and CB7 files.
+3. At the end it offers to make Flores PDF your default PDF reader. Windows doesn't let programs do that themselves, so it opens Windows' Default apps page on Flores PDF: click **Set default**.
+
+Uninstall from *Settings › Apps › Installed apps*. `FloresPDF-Setup.exe /S` installs silently.
+
+**Portable:** `FloresPDF.exe` runs from any folder without installing. Put an empty `FloresPDF-settings.toml` beside it to keep its settings there too.
+
+**Updates:** a few seconds after starting, Flores PDF asks GitHub whether there's a newer release; if so, an *Update to …* button appears in the toolbar. An installed copy downloads the new setup, closes, updates and opens again (after asking, and after any unsaved changes); a portable copy opens the release page. Turn it off under *Settings › System*.
+
+## ⌨️ Keyboard and mouse
+
+<details>
+<summary><b>All shortcuts</b></summary>
 
 | Action | Keys |
 |---|---|
@@ -58,72 +160,96 @@ To make a copy that wasn't installed your default PDF reader, open the settings 
 | Close the tab | Ctrl + W or Ctrl + F4, its ×, or a middle click on it |
 | Reopen a closed tab | Ctrl + Shift + T, or right-click a tab |
 | Move a tab | drag it |
-| Right-click menu on the page | right-click without turning the wheel. With text selected: copy, highlight, underline, strike out, find it in the document, search the web for it. Over a web link: copy its address. On an annotation: edit a note's or text box's text, or delete it. Always: zoom in and out around the spot clicked, fit page, fit width, actual size; bookmark the page; copy the page as an image or save it as PNG; print; save, save a copy; show the file in its folder, copy its path, document properties |
-| Right-click menu on a tab | close it, close the other tabs or those to its right, reopen a closed tab, show in folder, copy file path |
-| Page layout, rotation, presentation | the toolbar's view button (two pages, right of the zoom buttons), or the keys below |
-| One page / two pages / book view | Ctrl + 6 / Ctrl + 7 / Ctrl + 8 |
+| Right-click menu on the page | right-click without turning the wheel. With text selected: copy, highlight, underline, strike out, find it in the document, search the web for it. Over a web link: copy its address. On an annotation: edit a note's or text box's text, or delete it. Always: zoom, fit, bookmark the page, copy or save it as an image, print, save, save a copy, show in folder, copy path, properties |
+| Right-click menu on a tab | close it, close the others or those to its right, reopen a closed tab, show in folder, copy file path |
+| One page / two pages / book view | Ctrl + 6 / Ctrl + 7 / Ctrl + 8, or the toolbar's view button |
 | Rotate left / right | Ctrl + Shift + − / Ctrl + Shift + + |
-| Presentation | F5: one page at a time on a black screen. Click, →, Space or the wheel go on; right-click, ←, Backspace go back; Esc or F5 stop |
+| Presentation | F5: click, →, Space or the wheel go on; right-click, ←, Backspace go back; Esc or F5 stop |
 | Print | Ctrl + P; Esc stops a print job in progress |
-| Bookmark the page, or remove its bookmark | Ctrl + D, then name it (Enter). Bookmarks are in the sidebar's Bookmarks tab; right-click one to rename or remove it |
+| Bookmark the page, or remove its bookmark | Ctrl + D, then name it. Right-click a bookmark in the sidebar to rename or remove it |
 | Highlight / underline the selected text | Ctrl + H / Ctrl + U, or right-click it (strike out too) |
-| Annotate | the toolbar's pen (PDFs). Its bar has the tools: highlight, underline and strike out (drag across text), note (click, type, OK), pen (drag), text (click, type, OK), rectangle, ellipse, line and arrow (drag), and the eraser (click an annotation, including ones already in the file); then six colors, three line widths (also the text size), undo (Ctrl + Z) and Save. Esc puts the tool down. Hovering over a note shows its text |
-| Fill in a form | the toolbar's pencil (shown for PDFs with a form), or "Fill in form" in the page menu. Click a field and type (Tab goes to the next; Enter or Esc stops), Ctrl + V pastes; click check boxes and radio buttons, click a drop-down or list box to pick. Closing a tab or the window with changes not saved asks whether to save them first |
-| Save form entries and annotations into the PDF | Ctrl + S, the annotation bar's Save, or the page menu (PDFs only) |
-| Save a copy | Ctrl + Shift + S: the PDF with its entries and annotations, as another file; the open one is left as it is |
-| Main menu | F10, or the ⋯ button left of the gear: open, home, save, save a copy, annotate, print, properties, close, page navigation, find, toolbar, sidebar, full screen, presentation, settings, and About |
-| Move far, fast | drag a scroll bar's thumb, or press anywhere on the bar to jump there; the wheel over the side bar moves a page per notch, over the bottom one sideways |
-| Scroll | mouse wheel, arrow keys, drag with the middle button, or with the left button away from text. The wheel and keys glide smoothly; a touchpad moves the pages as your fingers do |
-| Select text | drag over it (past the window's edge, the pages scroll); double-click selects a word, Ctrl + A the page's text |
-| Copy the selection | Ctrl + C |
-| Find | Ctrl + F (or click the search box), type; Enter / Shift + Enter or F3 / Shift + F3 for next and previous |
+| Annotate | the toolbar's pen: highlight, underline, strike out (drag across text), note and text (click, type, OK), pen, rectangle, ellipse, line, arrow (drag), eraser; six colors, three widths, undo (Ctrl + Z), Save. Esc puts the tool down |
+| Fill in a form | the toolbar's pencil (PDFs with a form): click a field and type, Tab for the next |
+| Save into the PDF / save a copy | Ctrl + S / Ctrl + Shift + S |
+| Main menu | F10, or the ⋯ button |
+| Scroll | mouse wheel, arrows, middle-button drag, or left-button drag away from text; Shift + wheel sideways |
+| Move far, fast | drag the scroll bar's thumb, press anywhere on the bar to jump, or turn the wheel over it for a page per notch |
+| Select text / copy | drag over it, double-click for a word, Ctrl + A for the page / Ctrl + C |
+| Find | Ctrl + F, type; Enter / Shift + Enter or F3 / Shift + F3 for next and previous |
 | Clear the selection, then the search | Esc |
-| Scroll sideways | Shift + wheel |
 | Screen down / up | Page Down / Page Up, Space / Shift + Space |
-| Next / previous page | N / P, or → / ← when the page fits the window's width; the next pair of pages in a two-page layout |
-| Go to a page | Ctrl + G, or click the page number, type, Enter |
-| Follow a link | click it; hovering shows where it goes. Web and mail links open in your browser or mail program; links to files or programs are ignored |
+| Next / previous page | N / P, or → / ← when the page fits the width |
+| Go to a page | Ctrl + G, or click the page number |
 | Back / forward after a jump | Alt + ← / Alt + →, or the mouse's Back / Forward buttons |
-| Show or hide the sidebar (outline, bookmarks) | F12, or the toolbar's leftmost button; drag its edge to resize it |
+| Sidebar (outline, bookmarks) | F12, or the toolbar's leftmost button; drag its edge to resize |
 | First / last page | Home / End |
-| Zoom in / out | hold the right button and turn the wheel, or Ctrl + wheel (both zoom around the mouse); + / − |
+| Zoom in / out | hold the right button and turn the wheel, or Ctrl + wheel; + / − |
 | Fit page / actual size / fit width | Ctrl + 0 / Ctrl + 1 / Ctrl + 2 |
-| Settings | Ctrl + , (comma), or the gear button |
-| Show or hide the toolbar | F8 |
-| Full screen | F11; Esc leaves it once nothing else is open |
+| Settings | Ctrl + , (comma), or the gear |
+| Toolbar | F8 |
+| Full screen | F11 |
 | Close the window | Q, or Ctrl + W with no tab open |
 
-EPUB books are laid out as 6 × 9 inch pages in Georgia: headings, paragraphs, lists, quotes, preformatted text, pictures and links, each chapter on a new page, with the table of contents in the sidebar. The book's own styles (CSS) aren't applied. Search and selection work in EPUB and in DjVu files that have a text layer.
+</details>
 
-A password-protected PDF asks for its password when it opens. The password is kept in memory for that tab only, never written anywhere.
+## ⚙️ Settings and your files
 
-## Settings
+<details>
+<summary><b>Where things are kept</b></summary>
 
-The settings window (the gear, or Ctrl + ,) has its categories down the left (Appearance, Reading, Files, Memory and speed, System) and each setting as a card with a short explanation and its switch, number or drop-down. Changes apply as you make them; Esc or a click outside closes it. The settings are: theme (system, light, dark, black), page colors (normal, dark, sepia, black), toolbar, sidebar and its width, space between pages, zoom for new documents, wheel scroll distance, window position, smooth scrolling, the web search for selected text (Google, Bing or DuckDuckGo), highlight color, opening files as tabs of one window, remembering recent files, reopening last session's tabs, reloading files when they change, the resolution of page images, page cache size and render threads. System shows whether Flores PDF is your default PDF reader, opens the settings file, resets the settings and opens About. Black theme and black pages together make everything pure black except text and pictures, title bar included (on Windows 11), which OLED screens show by turning those pixels off.
-
-They're saved to `%APPDATA%\FloresPDF\settings.toml`, a plain text file that describes each setting. If a `FloresPDF-settings.toml` sits next to `FloresPDF.exe`, that one is used instead, which keeps a portable copy self-contained. Settings from before the rename, in `%APPDATA%\pdfreader`, are copied over the first time.
-
-Beside the settings file are plain text files Flores PDF keeps for you (with a `FloresPDF-` prefix in a portable copy):
+Settings are in `%APPDATA%\FloresPDF\settings.toml`, a plain text file with each setting explained, editable from *Settings › System*. A `FloresPDF-settings.toml` next to `FloresPDF.exe` is used instead, for a portable copy. Beside it (with a `FloresPDF-` prefix when portable):
 
 | File | What's in it |
 |---|---|
-| `history.txt` | Recent files, where you were in each (page, zoom, rotation, layout) and which tabs were open. Turning off "Remember opened files" deletes it |
+| `history.txt` | Recent files, where you were in each, and which tabs were open. Turning off *Remember opened files* deletes it |
 | `favorites.txt` | Bookmarks: page and name |
-| `highlights.txt` | Highlights of e-books, DjVu documents and comics, which can't hold them. (PDF highlights made before they went into the PDF are kept here until the PDF is next saved.) |
+| `highlights.txt` | Highlights of e-books, DjVu and comics, which can't hold them |
 
-## Layout
+Thumbnails for the start page are cached in `%LOCALAPPDATA%\FloresPDF\thumbnails`, and PDFium is unpacked to `%LOCALAPPDATA%\FloresPDF` the first time it's needed. A password typed for a protected PDF is kept in memory for that tab only, never written anywhere.
+
+</details>
+
+## 🛠️ Build from source
+
+Needs Windows, the MSVC build tools and Rust (1.99 is pinned in `rust-toolchain.toml`).
+
+```bash
+cargo build --release -p flores-pdf
+```
+
+```bash
+cargo build --release -p flores-setup
+```
+
+The setup packs the `FloresPDF.exe` it finds in the same target folder, so build the app first. A release build takes a few minutes, since it's optimized as one unit (fat LTO).
+
+<details>
+<summary><b>Project layout</b></summary>
 
 | Crate | What it does |
 |---|---|
-| `crates/engine` | The `Engine` trait, the PDF adapter (links, outline, properties, passwords, forms), EPUB, DjVu, comics and pictures, display lists, the glyph and image caches, and hayro's renderer layer (vendored in `src/raster`, Apache-2.0 or MIT) |
+| `crates/engine` | The `Engine` trait, the PDF adapter (links, outline, properties, passwords, annotations), EPUB, DjVu, comics and pictures, display lists, glyph and image caches, and hayro's renderer layer (vendored in `src/raster`) |
 | `crates/render` | Page layout (spreads, rotation), tile cache, render threads, compositor, page colors, the text thread for search and selection |
-| `crates/app` | The window, input, tabs, toolbar, sidebar, menus, start page and its thumbnails, printing, recent files, bookmarks, annotations, form filling and saving through PDFium, file watching, settings panel and settings file (`FloresPDF.exe`, its icon in `flores.ico`) |
+| `crates/app` | The window, tabs, toolbar, sidebar, menus, start page, settings window, annotations, forms and saving through PDFium, printing, updates (`FloresPDF.exe`) |
 | `crates/setup` | `FloresPDF-Setup.exe`: holds the app, compressed, and installs it for the current user |
-| `third_party/pdfium` | PDFium build 7881 for Windows x64 (`pdfium.dll`, without its JavaScript engine), with its licenses; the app's build packs both into the exe |
-| `bench/` | Engine, memory and CPU benchmarks, separate from the app |
+| `third_party/pdfium` | PDFium build 7881 for Windows x64, with its licenses; packed into the exe by the app's build |
+| `bench/` | Engine, memory and CPU benchmarks |
 
-`cargo run --release -p engine --example bench -- file.pdf` times the engine with display lists on and off and compares their pixels. `cargo run --release -p engine --example text -- file.pdf 3` prints page 3's extracted text. `cargo run --release -p engine --example nav -- file.pdf 3` prints the outline and page 3's links. `cargo run --release -p flores-pdf --example icon` draws the icon again. `cargo run --release -p engine --example samples -- page.png folder` writes a DjVu (with a text layer for its title line), WebP and GIF of a page, for testing.
+Design notes, every measurement and what was tested are in [docs/architecture.md](docs/architecture.md).
 
-## License
+</details>
 
-Flores PDF is under the [MIT license](LICENSE). What it includes keeps its own license: hayro and its renderer (vendored in `crates/engine/src/raster`), Apache-2.0 or MIT; PDFium, BSD-3-Clause, with the licenses of its parts in `third_party/pdfium`; UnRAR, under the UnRAR license, which allows reading RAR files but not making them; and the other Rust crates under theirs, listed in About.
+<details>
+<summary><b>Publishing a release</b></summary>
+
+Set `version` in `Cargo.toml`, build both exes, and attach `FloresPDF-Setup.exe` and `FloresPDF.exe`, named exactly so, to a GitHub release tagged `v` plus the version (for example `v1.2.0`). Every copy older than the tag then offers the update.
+
+</details>
+
+## 💬 Community
+
+Made by **aga2522**. Questions, ideas and bug reports are welcome on the [Discord server](https://discord.gg/3xuJY8UXKu) (a general server, all welcome) or in [GitHub issues](https://github.com/AgastyaShenoy/flores-pdf/issues).
+
+## 📄 License
+
+Flores PDF is under the [MIT license](LICENSE). What it includes keeps its own license: hayro and its renderer, Apache-2.0 or MIT; PDFium, BSD-3-Clause, with the licenses of its parts in `third_party/pdfium`; UnRAR, under the UnRAR license, which allows reading RAR files but not making them; and the other Rust crates under theirs, listed in *About*.
