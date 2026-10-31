@@ -24,7 +24,7 @@
   &nbsp;·&nbsp; <a href="#-features">Features</a>
   &nbsp;·&nbsp; <a href="#-performance">Performance</a>
   &nbsp;·&nbsp; <a href="#%EF%B8%8F-keyboard-and-mouse">Shortcuts</a>
-  &nbsp;·&nbsp; <a href="#-build-from-source">Build</a>
+  &nbsp;·&nbsp; <a href="#%EF%B8%8F-build-from-source">Build</a>
 </p>
 
 <p align="center">
