@@ -2,6 +2,7 @@
 name = "flores-setup"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 # packs target/<profile>/FloresPDF.exe, so build flores-pdf first
 build = "build.rs"
 

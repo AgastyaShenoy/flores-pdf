@@ -123,3 +123,7 @@ Beside the settings file are plain text files Flores PDF keeps for you (with a `
 | `bench/` | Engine, memory and CPU benchmarks, separate from the app |
 
 `cargo run --release -p engine --example bench -- file.pdf` times the engine with display lists on and off and compares their pixels. `cargo run --release -p engine --example text -- file.pdf 3` prints page 3's extracted text. `cargo run --release -p engine --example nav -- file.pdf 3` prints the outline and page 3's links. `cargo run --release -p flores-pdf --example icon` draws the icon again. `cargo run --release -p engine --example samples -- page.png folder` writes a DjVu (with a text layer for its title line), WebP and GIF of a page, for testing.
+
+## License
+
+Flores PDF is under the [MIT license](LICENSE). What it includes keeps its own license: hayro and its renderer (vendored in `crates/engine/src/raster`), Apache-2.0 or MIT; PDFium, BSD-3-Clause, with the licenses of its parts in `third_party/pdfium`; UnRAR, under the UnRAR license, which allows reading RAR files but not making them; and the other Rust crates under theirs, listed in About.
