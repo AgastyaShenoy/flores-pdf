@@ -18,6 +18,14 @@ At the end it offers to make Flores PDF your default PDF reader. Windows doesn't
 
 `FloresPDF.exe` also runs on its own from any folder, without installing (put an empty `FloresPDF-settings.toml` beside it to keep its settings there).
 
+Download `FloresPDF-Setup.exe` (or the portable `FloresPDF.exe`) from the [latest release](https://github.com/AgastyaShenoy/flores-pdf/releases/latest).
+
+## Updates
+
+A few seconds after it starts, Flores PDF asks GitHub whether there's a newer release; if there is, an "Update to …" button shows in the toolbar. In an installed copy it downloads the new setup, closes, installs and opens again (after asking, and after any changes not saved). A portable copy opens the release's page. Turn the check off under Settings › System › Check for updates; nothing is sent but the request.
+
+To publish a release: set `version` in `Cargo.toml`, build both exes (below), and attach `FloresPDF-Setup.exe` and `FloresPDF.exe`, named exactly so, to a GitHub release tagged `v` and the version (`v1.2.0`). Copies older than the tag offer it.
+
 ## Build and run
 
 ```bash
