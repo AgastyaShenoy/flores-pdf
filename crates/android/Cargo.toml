@@ -1,0 +1,19 @@
+[package]
+name = "flores-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# libflores.so, loaded by the Android app in android/. Built by android/build-rust.ps1; on other
+# targets the library is empty.
+[lib]
+name = "flores"
+crate-type = ["cdylib"]
+
+[dependencies]
+engine.workspace = true
+render.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", default-features = false }

@@ -232,6 +232,8 @@ The setup packs the `FloresPDF.exe` it finds in the same target folder, so build
 | `crates/render` | Page layout (spreads, rotation), tile cache, render threads, compositor, page colors, the text thread for search and selection |
 | `crates/app` | The window, tabs, toolbar, sidebar, menus, start page, settings window, annotations, forms and saving through PDFium, printing, updates (`FloresPDF.exe`) |
 | `crates/setup` | `FloresPDF-Setup.exe`: holds the app, compressed, and installs it for the current user |
+| `crates/android` | `libflores.so`: the engine and renderer behind JNI for the Android app, drawing straight into its surface |
+| `android/` | The Android app (Kotlin, platform views only, no AndroidX) |
 | `third_party/pdfium` | PDFium build 7881 for Windows x64, with its licenses; packed into the exe by the app's build |
 | `bench/` | Engine, memory and CPU benchmarks |
 
@@ -245,6 +247,33 @@ Design notes, every measurement and what was tested are in [docs/architecture.md
 Set `version` in `Cargo.toml`, build both exes, and attach `FloresPDF-Setup.exe` and `FloresPDF.exe`, named exactly so, to a GitHub release tagged `v` plus the version (for example `v1.2.0`). Every copy older than the tag then offers the update.
 
 </details>
+
+## 📱 Android
+
+An early Android version lives in `android/`, for Android 8 and later. It renders pages with the same engine and renderer as the Windows app: the tiles, render threads, display lists and glyph cache, and the Normal, Dark, Sepia and Black page colors. The GPU (OpenGL ES) puts the rendered tiles on screen, so scrolling keeps up with the display's full refresh rate: a steady 144 fps on a Xiaomi Pad 6. Around the pages is a plain Android UI:
+
+- PDF, EPUB, DjVu, CBZ and CB7 comics, and pictures, from the system's file picker or from other apps. CBR comics aren't supported yet, because UnRAR's build can't cross-compile from Windows.
+- Smooth scrolling and flinging, pinch and double-tap zoom, and a page slider.
+- Contents, links (Back returns from them), search with every match highlighted, and go to page.
+- Recent files reopen where you left them. Password-protected PDFs ask for the password. The volume keys turn pages.
+
+Annotations, forms, printing and settings are Windows-only for now.
+
+To build it you need the Android SDK and NDK (Android Studio installs both) and Rust's Android targets:
+
+```bash
+rustup target add aarch64-linux-android x86_64-linux-android
+```
+
+```bash
+powershell -File android/build-rust.ps1
+```
+
+```bash
+cd android && ./gradlew assembleRelease
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`, signed with the debug key so it installs for testing. For the emulator, add `-Pemulator` to include the x86-64 engine.
 
 ## 💬 Community
 

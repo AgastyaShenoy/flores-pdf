@@ -24,12 +24,15 @@ miniz_oxide = "0.8.9"
 # and DjVu documents
 gif = "0.14.2"
 image-webp = "0.2.4"
-unrar = "0.5.8"
 djvu-rs = "0.43.0"
 # CB7 comics: LZMA and LZMA2, which 7-Zip uses unless told otherwise
 sevenz-rust2 = { version = "0.24.2", default-features = false }
 # EPUB text: Windows' fonts, outlined (the same version the app uses for its UI)
 skrifa = "0.46.2"
+
+# UnRAR's build script compiles for the system it runs on, so it can't build for Android from Windows
+[target.'cfg(not(target_os = "android"))'.dependencies]
+unrar = "0.5.8"
 
 [dev-dependencies]
 # the benchmark saves crops with vello_cpu's PNG encoder

@@ -249,8 +249,17 @@ pub fn open_pdf_bytes(data: Vec<u8>, password: &str) -> Result<Arc<dyn Engine>, 
     Ok(Arc::new(pdf::PdfEngine::open(Arc::new(Bytes::Read(data)), Options::default().display_lists, password)?))
 }
 
+/// Opens a document from a file already open, such as one another app handed over. `path` is only
+/// used by formats read by name (7-Zip and RAR comics), and may be one that reaches the same file.
+pub fn open_file(file: File, path: &Path, password: &str) -> Result<Arc<dyn Engine>, OpenError> {
+    open_from(file, path, Options::default(), password)
+}
+
 fn open_inner(path: &Path, options: Options, password: &str) -> Result<Arc<dyn Engine>, OpenError> {
-    let mut file = File::open(path)?;
+    open_from(File::open(path)?, path, options, password)
+}
+
+fn open_from(mut file: File, path: &Path, options: Options, password: &str) -> Result<Arc<dyn Engine>, OpenError> {
     let len = file.metadata()?.len();
     let bytes = if len > MAP_ABOVE {
         // SAFETY: Windows won't let another program truncate a mapped file. One that writes into it

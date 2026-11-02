@@ -1,4 +1,4 @@
-//! EPUB e-books, laid out into pages once when the book opens: 6 × 9 inch pages, Windows' Georgia,
+//! EPUB e-books, laid out into pages once when the book opens: 6 × 9 inch pages, Georgia (Noto Serif on Android),
 //! justified paragraphs, headings, lists, quotes, preformatted text, pictures, and chapters starting
 //! on new pages. The book's CSS isn't applied; its structure is. The table of contents becomes the
 //! outline, links work, and since every character's place is known, search and selection do too.
@@ -599,32 +599,49 @@ impl PageRenderer for EpubRenderer<'_> {
     }
 }
 
-/// Windows' fonts for books: Georgia in four faces, Consolas, and Segoe UI for characters they
-/// lack. Memory-mapped, so they don't count as ours.
+/// The system's fonts for books: on Windows Georgia in four faces, Consolas, and Segoe UI for
+/// characters they lack; on Android Noto Serif, Droid Sans Mono and Roboto. Memory-mapped, so they
+/// don't count as ours.
 struct Fonts {
     faces: Vec<Mmap>,
 }
 
+/// Files for each face (regular, bold, italic, bold italic, monospace, fallback), best first.
+#[cfg(not(target_os = "android"))]
+const FACES: [&[&str]; 6] = [
+    &["georgia.ttf", "times.ttf", "segoeui.ttf"],
+    &["georgiab.ttf", "timesbd.ttf", "segoeuib.ttf", "georgia.ttf"],
+    &["georgiai.ttf", "timesi.ttf", "segoeuii.ttf", "georgia.ttf"],
+    &["georgiaz.ttf", "timesbi.ttf", "segoeuiz.ttf", "georgia.ttf"],
+    &["consola.ttf", "cour.ttf", "georgia.ttf"],
+    &["segoeui.ttf", "arial.ttf", "georgia.ttf"],
+];
+#[cfg(target_os = "android")]
+const FACES: [&[&str]; 6] = [
+    &["NotoSerif-Regular.ttf", "Roboto-Regular.ttf"],
+    &["NotoSerif-Bold.ttf", "NotoSerif-Regular.ttf", "Roboto-Regular.ttf"],
+    &["NotoSerif-Italic.ttf", "NotoSerif-Regular.ttf", "Roboto-Regular.ttf"],
+    &["NotoSerif-BoldItalic.ttf", "NotoSerif-Bold.ttf", "NotoSerif-Regular.ttf", "Roboto-Regular.ttf"],
+    &["DroidSansMono.ttf", "CutiveMono.ttf", "Roboto-Regular.ttf"],
+    &["Roboto-Regular.ttf", "RobotoStatic-Regular.ttf", "NotoSerif-Regular.ttf"],
+];
+
 impl Fonts {
     fn load() -> Option<Self> {
+        #[cfg(not(target_os = "android"))]
         let dir = std::env::var_os("WINDIR").map_or_else(|| "C:\\Windows".into(), std::path::PathBuf::from).join("Fonts");
+        #[cfg(target_os = "android")]
+        let dir = std::path::PathBuf::from("/system/fonts");
         let open = |names: &[&str]| {
             names.iter().find_map(|n| {
                 let file = std::fs::File::open(dir.join(n)).ok()?;
-                // SAFETY: font files in the Windows folder aren't changed while in use.
+                // SAFETY: the system's font files aren't changed while in use.
                 let map = unsafe { Mmap::map(&file) }.ok()?;
                 FontRef::new(&map).ok()?;
                 Some(map)
             })
         };
-        let faces = vec![
-            open(&["georgia.ttf", "times.ttf", "segoeui.ttf"])?,
-            open(&["georgiab.ttf", "timesbd.ttf", "segoeuib.ttf", "georgia.ttf"])?,
-            open(&["georgiai.ttf", "timesi.ttf", "segoeuii.ttf", "georgia.ttf"])?,
-            open(&["georgiaz.ttf", "timesbi.ttf", "segoeuiz.ttf", "georgia.ttf"])?,
-            open(&["consola.ttf", "cour.ttf", "georgia.ttf"])?,
-            open(&["segoeui.ttf", "arial.ttf", "georgia.ttf"])?,
-        ];
+        let faces = FACES.iter().map(|names| open(names)).collect::<Option<Vec<_>>>()?;
         Some(Self { faces })
     }
 
