@@ -14,6 +14,8 @@ crate-type = ["cdylib"]
 [dependencies]
 engine.workspace = true
 render.workspace = true
+# thumbnails for the start page: the version vello_cpu already pulls in
+png = "0.18.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.21", default-features = false }

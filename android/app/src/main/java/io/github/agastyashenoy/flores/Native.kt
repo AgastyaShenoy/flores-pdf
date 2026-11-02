@@ -58,6 +58,23 @@ object Native {
     @JvmStatic external fun tap(h: Long, x: Float, y: Float): String?
     @JvmStatic external fun back(h: Long): Boolean
 
+    /** Turns pages [rotation] quarter turns clockwise; [spread] 0 one page to a row, 1 two, 2 a book. */
+    @JvmStatic external fun setView(h: Long, rotation: Int, spread: Int)
+
+    /** Selects the word at (x, y); false if there's no text there, or it isn't ready yet. */
+    @JvmStatic external fun selectWord(h: Long, x: Float, y: Float): Boolean
+    /** Moves the selection's start (0) or end (1) to (x, y); returns the handle now being moved. */
+    @JvmStatic external fun selectTo(h: Long, handle: Int, x: Float, y: Float): Int
+    @JvmStatic external fun clearSelection(h: Long)
+    @JvmStatic external fun selectionText(h: Long): String?
+    /** Start x, y, end x, y of the selection's handles in the view; null with no selection. */
+    @JvmStatic external fun selectionHandles(h: Long): FloatArray?
+
+    /** Lines of label and value, tab-separated. */
+    @JvmStatic external fun info(h: Long): String
+    /** Saves the first page, [width] pixels wide, as a PNG at [path], in the background. */
+    @JvmStatic external fun saveThumbnail(h: Long, path: String, width: Int)
+
     @JvmStatic external fun search(h: Long, query: String)
     /** Matches found, pages searched, pages, current match (-1 for none). */
     @JvmStatic external fun searchStatus(h: Long): IntArray

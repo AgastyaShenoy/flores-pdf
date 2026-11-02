@@ -3,8 +3,8 @@
 
 use crate::gpu::Gpu;
 use crate::window::Window;
-use engine::{Engine, OutlineItem, PageSize, Target};
-use render::text::TextWorker;
+use engine::{Engine, OutlineItem, PageSize, PageText, Target};
+use render::text::{self, TextWorker};
 use render::{Layout, Look, RenderPool, Spread, TILE, TileCache, TileKey, Viewport};
 use std::sync::Arc;
 
@@ -17,6 +17,7 @@ const CACHE_SCREENS: usize = 2;
 /// Search matches, blended over the page: color and opacity out of 255. As on Windows.
 const MATCH_TINT: (u32, u32) = (0x00FF_D400, 110);
 const CURRENT_TINT: (u32, u32) = (0x00FF_7A00, 150);
+const SELECTION_TINT: (u32, u32) = (0x0033_8CFF, 90);
 /// Places kept for going back after following a link.
 const BACK: usize = 50;
 /// Where the engine failed on a tile. As on Windows.
@@ -34,6 +35,14 @@ pub enum Tap {
     Moved,
     /// A link out of it, for the app to open.
     Uri(String),
+}
+
+/// Characters `start` up to `end` of a page's text.
+#[derive(Clone, Copy)]
+struct Selection {
+    page: usize,
+    start: usize,
+    end: usize,
 }
 
 pub struct Viewer {
@@ -72,6 +81,11 @@ pub struct Viewer {
     current: Option<(usize, usize)>,
     /// Where links were followed from: page and points down from its top.
     back: Vec<(usize, f32)>,
+    /// Quarter turns clockwise, and how pages sit in rows.
+    rotation: u8,
+    spread: Spread,
+    /// Selected text, on one page.
+    selection: Option<Selection>,
     gpu: Option<Gpu>,
 }
 
@@ -107,6 +121,9 @@ impl Viewer {
             searched: (0, 0),
             current: None,
             back: Vec::new(),
+            rotation: 0,
+            spread: Spread::One,
+            selection: None,
             gpu: None,
         }
     }
@@ -151,23 +168,29 @@ impl Viewer {
         self.dirty = true;
     }
 
-    /// Search matches on the pages in view, tinted over them.
-    fn draw_matches(&self, view: &Viewport) {
+    /// Search matches and the selection on the pages in view, tinted over them.
+    fn draw_highlights(&self, view: &Viewport) {
         let Some(gpu) = &self.gpu else { return };
         let pages = self.layout.pages_between(view.y, view.y + i64::from(view.height));
-        let scale = self.layout.scale;
+        let tint = |page: usize, r: &[f32; 4], (color, alpha): (u32, u32)| {
+            let (x0, y0, x1, y1) = self.rect_to_doc(page, r);
+            let (x0, y0) = ((x0 - view.x as f64).floor() as f32, (y0 - view.y as f64).floor() as f32);
+            let (x1, y1) = ((x1 - view.x as f64).ceil() as f32, (y1 - view.y as f64).ceil() as f32);
+            gpu.fill(x0, y0, (x1 - x0).max(1.0), (y1 - y0).max(1.0), color, alpha);
+        };
         self.text.with_matches(|matches| {
             for m in matches.iter().filter(|m| pages.contains(&m.page)) {
-                let p = self.layout.pages[m.page];
-                let (ox, oy) = ((p.x - view.x) as f32, (p.y - view.y) as f32);
-                let (color, alpha) = if Some((m.page, m.chars.start)) == self.current { CURRENT_TINT } else { MATCH_TINT };
+                let style = if Some((m.page, m.chars.start)) == self.current { CURRENT_TINT } else { MATCH_TINT };
                 for r in &m.rects {
-                    let (x0, y0) = ((ox + r[0] * scale).floor(), (oy + r[1] * scale).floor());
-                    let (x1, y1) = ((ox + r[2] * scale).ceil(), (oy + r[3] * scale).ceil());
-                    gpu.fill(x0, y0, (x1 - x0).max(1.0), (y1 - y0).max(1.0), color, alpha);
+                    tint(m.page, r, style);
                 }
             }
         });
+        if let Some((sel, t)) = self.selection.and_then(|s| Some((s, self.text.text(s.page)?))) {
+            for r in text::line_rects(&t, sel.start..sel.end) {
+                tint(sel.page, &r, SELECTION_TINT);
+            }
+        }
     }
 
     pub fn set_look(&mut self, look: Look, background: u32) {
@@ -210,7 +233,7 @@ impl Viewer {
             let mut sharp = Vec::new();
             let mut missing = false;
             for (col, row, area) in self.layout.tiles(page, &view) {
-                let key = TileKey { page, scale: scale.to_bits(), col, row, look, rotation: 0 };
+                let key = TileKey { page, scale: scale.to_bits(), col, row, look, rotation: self.layout.rotation };
                 let cached = self.cache.get(&key);
                 if !gpu.has(&key) {
                     match cached {
@@ -234,7 +257,7 @@ impl Viewer {
             }
             if missing {
                 // farthest zoom first, so the closest ends up on top
-                let mut others = gpu.others(page, scale.to_bits(), look);
+                let mut others = gpu.others(page, scale.to_bits(), look, self.layout.rotation);
                 let off = |k: &TileKey| (f32::from_bits(k.scale) / scale).ln().abs();
                 others.sort_by(|a, b| off(&b.0).total_cmp(&off(&a.0)));
                 for (key, w, h) in others {
@@ -247,7 +270,10 @@ impl Viewer {
                 gpu.image(&key, ox + area.x as f32, oy + area.y as f32, area.width as f32, area.height as f32);
             }
         }
-        self.draw_matches(&view);
+        self.draw_highlights(&view);
+        // text for selecting on the pages in view, ready before a finger asks for it
+        let visible: Vec<usize> = self.layout.pages_between(view.y, view.y + i64::from(view.height)).collect();
+        self.text.want(&visible);
         if let Some(gpu) = &mut self.gpu {
             gpu.finish(TEXTURE_HALF_SCREENS * self.width as usize * self.height as usize * 2);
         }
@@ -265,22 +291,27 @@ impl Viewer {
 
     /// Pixels per point at `zoom`.
     fn scale_for(&self, zoom: f32) -> f32 {
-        let widest = self.sizes.iter().fold(1.0f32, |m, s| m.max(s.width));
-        let fit = self.width.saturating_sub(2 * self.gap).max(1) as f32 / widest;
+        let turned = |s: &PageSize| if self.rotation % 2 == 1 { s.height } else { s.width };
+        let widest = self.sizes.iter().fold(1.0f32, |m, s| m.max(turned(s)));
+        // a spread is two pages wide, with a gap between them
+        let across = if self.spread == Spread::One { 1 } else { 2 };
+        let fit = self.width.saturating_sub((across + 1) * self.gap).max(1) as f32 / (widest * across as f32);
         // past this, a page's tiles would number in the thousands
         (fit * zoom).min(64.0)
     }
 
-    /// Lays the pages out again at the current zoom and view width, keeping the document point under
-    /// `anchor` (a position in the view) where it was.
+    /// Lays the pages out again at the current zoom, view width, rotation and spread, keeping the
+    /// document point under `anchor` (a position in the view) where it was.
     fn relayout(&mut self, anchor: (f64, f64)) {
         let scale = self.scale_for(self.zoom);
         let old = &self.layout;
-        if scale == old.scale && self.width == old.view_width {
+        let same_view = old.rotation == self.rotation && old.spread == self.spread;
+        if scale == old.scale && self.width == old.view_width && same_view {
             return;
         }
-        let new = Layout::arranged(&self.sizes, scale, self.gap, self.width, 0, Spread::One);
-        if !old.pages.is_empty() && !new.pages.is_empty() {
+        let new = Layout::arranged(&self.sizes, scale, self.gap, self.width, self.rotation, self.spread);
+        // a new rotation or spread moves pages about: the caller shows the page again
+        if !old.pages.is_empty() && !new.pages.is_empty() && same_view {
             let (ax, ay) = (self.x + anchor.0, self.y + anchor.1);
             let i = old.page_at(ay as i64);
             let (p, q) = (old.pages[i], new.pages[i]);
@@ -291,6 +322,68 @@ impl Viewer {
         self.layout = new;
         self.clamp();
         self.dirty = true;
+    }
+
+    /// Turns pages `rotation` quarter turns clockwise and sets them in rows of one (`spread` 0), two
+    /// (1), or as a book (2), keeping the current page in view.
+    pub fn set_view(&mut self, rotation: u8, spread: u8) {
+        let spread = match spread {
+            1 => Spread::Two,
+            2 => Spread::Book,
+            _ => Spread::One,
+        };
+        if (rotation % 4, spread) == (self.rotation, self.spread) {
+            return;
+        }
+        let page = self.current_page();
+        (self.rotation, self.spread) = (rotation % 4, spread);
+        self.selection = None;
+        self.relayout((0.0, 0.0));
+        self.go_to_page(page);
+    }
+
+    /// A point of `page`, in points from its top-left as it is, in document pixels.
+    fn to_doc(&self, page: usize, x: f32, y: f32) -> (f64, f64) {
+        let (p, s) = (self.layout.pages[page], self.layout.scale);
+        let PageSize { width: w, height: h } = self.sizes[page];
+        let (tx, ty) = match self.layout.rotation % 4 {
+            0 => (x, y),
+            1 => (h - y, x),
+            2 => (w - x, h - y),
+            _ => (y, w - x),
+        };
+        (p.x as f64 + f64::from(tx * s), p.y as f64 + f64::from(ty * s))
+    }
+
+    /// The point of `page`, in points from its top-left as it is, at (dx, dy) in document pixels.
+    fn from_doc(&self, page: usize, dx: f64, dy: f64) -> (f32, f32) {
+        let (p, s) = (self.layout.pages[page], f64::from(self.layout.scale));
+        let PageSize { width: w, height: h } = self.sizes[page];
+        let (tx, ty) = (((dx - p.x as f64) / s) as f32, ((dy - p.y as f64) / s) as f32);
+        match self.layout.rotation % 4 {
+            0 => (tx, ty),
+            1 => (ty, h - tx),
+            2 => (w - tx, h - ty),
+            _ => (w - ty, tx),
+        }
+    }
+
+    /// A rectangle of `page` (x0, y0, x1, y1 in points of the page as it is) in document pixels.
+    fn rect_to_doc(&self, page: usize, r: &[f32; 4]) -> (f64, f64, f64, f64) {
+        let (ax, ay) = self.to_doc(page, r[0], r[1]);
+        let (bx, by) = self.to_doc(page, r[2], r[3]);
+        (ax.min(bx), ay.min(by), ax.max(bx), ay.max(by))
+    }
+
+    /// The page under (x, y) in the view, and the point on it in points.
+    fn page_point(&self, x: f64, y: f64) -> Option<(usize, f32, f32)> {
+        if self.layout.pages.is_empty() {
+            return None;
+        }
+        let (dx, dy) = (self.x + x, self.y + y);
+        let page = self.layout.page_at_point(dx as i64, dy as i64);
+        let (px, py) = self.from_doc(page, dx, dy);
+        Some((page, px, py))
     }
 
     fn max_scroll(&self) -> (f64, f64) {
@@ -363,8 +456,11 @@ impl Viewer {
     /// Shows `page`, from `y` points down it if given, else from its top.
     pub fn go_to(&mut self, page: usize, y: Option<f32>) {
         let Some(p) = self.layout.pages.get(page.min(self.sizes.len().saturating_sub(1))) else { return };
-        let top = match y {
-            Some(y) => p.y as f64 + f64::from(y * self.layout.scale) - f64::from(self.gap),
+        // a line the PDF names, where it is on the turned page; a page turned on its side from its top
+        let page = page.min(self.sizes.len() - 1);
+        let line = y.filter(|_| self.layout.rotation % 2 == 0).map(|y| self.to_doc(page, 0.0, y).1);
+        let top = match line {
+            Some(y) => y - f64::from(self.gap),
             None => (p.y - i64::from(self.gap)) as f64,
         } - self.inset_top;
         self.scroll_to(self.x, top);
@@ -388,14 +484,7 @@ impl Viewer {
 
     /// Follows the link at (x, y) in the view, if there is one.
     pub fn tap(&mut self, x: f64, y: f64) -> Tap {
-        let (dx, dy) = (self.x + x, self.y + y);
-        if self.layout.pages.is_empty() {
-            return Tap::Nothing;
-        }
-        let page = self.layout.page_at_point(dx as i64, dy as i64);
-        let p = self.layout.pages[page];
-        let s = f64::from(self.layout.scale);
-        let (px, py) = (((dx - p.x as f64) / s) as f32, ((dy - p.y as f64) / s) as f32);
+        let Some((page, px, py)) = self.page_point(x, y) else { return Tap::Nothing };
         // a little slack around small links, for fingers
         let slack = (4.0 / self.layout.scale).max(2.0);
         let links = self.engine.page_links(page);
@@ -459,10 +548,8 @@ impl Viewer {
         });
         let Some((key, page, rect)) = found else { return false };
         self.current = Some(key);
-        if let (Some(p), Some(r)) = (self.layout.pages.get(page), rect) {
-            let s = f64::from(self.layout.scale);
-            let (x0, y0) = (p.x as f64 + f64::from(r[0]) * s, p.y as f64 + f64::from(r[1]) * s);
-            let (x1, y1) = (p.x as f64 + f64::from(r[2]) * s, p.y as f64 + f64::from(r[3]) * s);
+        if let Some(r) = rect.filter(|_| page < self.sizes.len()) {
+            let (x0, y0, x1, y1) = self.rect_to_doc(page, &r);
             let (w, h) = (f64::from(self.width), f64::from(self.height));
             // only move if it's out of view: to a third of the way down, centered across if need be
             let y = if y0 < self.y || y1 > self.y + h { y0 - h / 3.0 } else { self.y };
@@ -471,5 +558,114 @@ impl Viewer {
         }
         self.dirty = true;
         true
+    }
+
+    /// Selects the word at (x, y) in the view. False when there's no text there, or the page's text
+    /// isn't ready yet (it's asked for, so a moment later it may be).
+    pub fn select_word(&mut self, x: f64, y: f64) -> bool {
+        let Some((page, px, py)) = self.page_point(x, y) else { return false };
+        let Some(t) = self.page_text(page) else { return false };
+        // a finger is broad: the character under it, or failing that the nearest one close by
+        let reach = (12.0 / self.layout.scale).max(3.0);
+        let near = || {
+            let distance = |r: &[f32; 4]| (r[0] - px).max(px - r[2]).max(0.0) + 2.0 * (r[1] - py).max(py - r[3]).max(0.0);
+            let (i, c) = t.chars.iter().enumerate().filter(|(_, c)| c.ch != '\n').min_by(|a, b| distance(&a.1.rect).total_cmp(&distance(&b.1.rect)))?;
+            (distance(&c.rect) <= reach).then_some(i)
+        };
+        let Some(i) = text::char_at(&t, px, py).or_else(near) else { return false };
+        let r = text::word_around(&t, i);
+        self.selection = Some(Selection { page, start: r.start, end: r.end });
+        self.dirty = true;
+        true
+    }
+
+    /// Moves the selection's start (`handle` 0) or end (1) to the text nearest (x, y) in the view.
+    /// Returns the handle being moved, which swaps when one is dragged past the other.
+    pub fn select_to(&mut self, handle: i32, x: f64, y: f64) -> i32 {
+        let Some(mut sel) = self.selection else { return handle };
+        let Some(t) = self.page_text(sel.page) else { return handle };
+        let (px, py) = self.from_doc(sel.page, self.x + x, self.y + y);
+        let b = text::boundary_at(&t, px, py);
+        let mut handle = handle;
+        if handle == 0 {
+            sel.start = b;
+        } else {
+            sel.end = b;
+        }
+        if sel.start > sel.end {
+            (sel.start, sel.end) = (sel.end, sel.start);
+            handle = 1 - handle;
+        }
+        // never empty: at least the character under the finger
+        if sel.start == sel.end {
+            sel.end = (sel.start + 1).min(t.chars.len());
+        }
+        self.selection = Some(sel);
+        self.dirty = true;
+        handle
+    }
+
+    pub fn clear_selection(&mut self) {
+        if self.selection.take().is_some() {
+            self.dirty = true;
+        }
+    }
+
+    pub fn selection_text(&self) -> Option<String> {
+        let sel = self.selection?;
+        let t = self.text.text(sel.page)?;
+        Some(text::text_of(&t, sel.start..sel.end).trim().to_owned()).filter(|s| !s.is_empty())
+    }
+
+    /// Where the selection's handles go, in view pixels: the start's bottom-left corner, then the
+    /// end's bottom-right.
+    pub fn selection_handles(&self) -> Option<[f32; 4]> {
+        let sel = self.selection?;
+        let t = self.text.text(sel.page)?;
+        let rects = text::line_rects(&t, sel.start..sel.end);
+        let (first, last) = (rects.first()?, rects.last()?);
+        let (ax0, _, _, ay1) = self.rect_to_doc(sel.page, first);
+        let (_, _, bx1, by1) = self.rect_to_doc(sel.page, last);
+        Some([(ax0 - self.x) as f32, (ay1 - self.y) as f32, (bx1 - self.x) as f32, (by1 - self.y) as f32])
+    }
+
+    fn page_text(&self, page: usize) -> Option<Arc<PageText>> {
+        let t = self.text.text(page);
+        if t.is_none() {
+            self.text.want(&[page]);
+        }
+        t
+    }
+
+    /// What the document says about itself, as lines of label and value, tab-separated.
+    pub fn info(&self) -> String {
+        let i = self.engine.info();
+        let mut out = format!("Format\t{}\nPages\t{}\n", i.format, self.sizes.len());
+        let fields = [
+            ("Title", &i.title),
+            ("Author", &i.author),
+            ("Subject", &i.subject),
+            ("Keywords", &i.keywords),
+            ("Created with", &i.creator),
+            ("Converted by", &i.producer),
+            ("Created", &i.created),
+            ("Modified", &i.modified),
+        ];
+        for (label, value) in fields {
+            if let Some(v) = value.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                let v: String = v.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+                out.push_str(&format!("{label}\t{v}\n"));
+            }
+        }
+        if let Some(size) = self.sizes.first() {
+            let (w, h) = (size.width / 72.0 * 25.4, size.height / 72.0 * 25.4);
+            out.push_str(&format!("Page size\t{w:.0} × {h:.0} mm\n"));
+        }
+        out
+    }
+
+    /// The engine, for work on another thread such as a thumbnail.
+    pub fn engine(&self) -> Arc<dyn Engine> {
+        self.engine.clone()
     }
 }

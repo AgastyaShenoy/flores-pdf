@@ -31,6 +31,10 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
         fun onFrame()
         /** The surface has its size for the first time: a good moment to restore the position. */
         fun onReady()
+        /** A long press at (x, y): true if it started selecting text, which the finger then drags. */
+        fun onLongPress(x: Float, y: Float): Boolean
+        fun onSelectDrag(x: Float, y: Float)
+        fun onSelectEnd()
     }
 
     private var handle = 0L
@@ -40,6 +44,8 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
     private var looping = false
     private val scroller = OverScroller(context)
     private var zooming: ValueAnimator? = null
+    /** A long press started selecting: the finger drags the selection's end, not the pages. */
+    private var selecting = false
 
     init {
         holder.addCallback(this)
@@ -149,6 +155,14 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
             return true
         }
 
+        override fun onLongPress(e: MotionEvent) {
+            if (handle == 0L || scale.isInProgress) return
+            if (listener.onLongPress(e.x, e.y)) {
+                selecting = true
+                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            }
+        }
+
         override fun onDoubleTap(e: MotionEvent): Boolean {
             if (handle == 0L) return false
             // in to read closer, or back out to the page's width
@@ -217,6 +231,16 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (selecting) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> listener.onSelectDrag(event.x, event.y)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    selecting = false
+                    listener.onSelectEnd()
+                }
+            }
+            return true
+        }
         scale.onTouchEvent(event)
         gestures.onTouchEvent(event)
         return true

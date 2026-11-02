@@ -262,10 +262,10 @@ impl Gpu {
 
     /// Textures of `page` at scales other than `scale`, with their sizes, to stretch over tiles
     /// not rendered yet.
-    pub fn others(&self, page: usize, scale: u32, look: u8) -> Vec<(TileKey, u32, u32)> {
+    pub fn others(&self, page: usize, scale: u32, look: u8, rotation: u8) -> Vec<(TileKey, u32, u32)> {
         self.textures
             .iter()
-            .filter(|(k, _)| k.page == page && k.scale != scale && k.look == look)
+            .filter(|(k, _)| k.page == page && k.scale != scale && k.look == look && k.rotation == rotation)
             .map(|(k, t)| (*k, t.width, t.height))
             .collect()
     }

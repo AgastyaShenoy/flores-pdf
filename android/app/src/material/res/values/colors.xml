@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the icon's sea teal, as Material 3 roles; Android 12 and later use the wallpaper's instead -->
+    <color name="teal_primary">#0E7C7B</color>
+    <color name="teal_on_primary">#FFFFFF</color>
+    <color name="teal_container">#B5ECEA</color>
+    <color name="teal_on_container">#00201F</color>
+</resources>

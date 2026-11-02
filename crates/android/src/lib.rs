@@ -261,3 +261,85 @@ fn floats(env: JNIEnv, values: &[f32]) -> jfloatArray {
         Err(_) => std::ptr::null_mut(),
     }
 }
+
+/// Turns pages `rotation` quarter turns clockwise and shows them one (`spread` 0) or two (1) to a
+/// row, or as a book (2).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_setView(_: JNIEnv, _: JClass, h: jlong, rotation: jint, spread: jint) {
+    unsafe { viewer(h) }.set_view(rotation.rem_euclid(4) as u8, spread.clamp(0, 2) as u8);
+}
+
+/// Selects the word at (x, y); false if there's no text there or it isn't ready yet.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_selectWord(_: JNIEnv, _: JClass, h: jlong, x: jfloat, y: jfloat) -> jboolean {
+    if guard(false, || unsafe { viewer(h) }.select_word(f64::from(x), f64::from(y))) { JNI_TRUE } else { JNI_FALSE }
+}
+
+/// Moves the selection's start (0) or end (1) handle to (x, y); returns the handle now being moved.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_selectTo(_: JNIEnv, _: JClass, h: jlong, handle: jint, x: jfloat, y: jfloat) -> jint {
+    guard(handle, || unsafe { viewer(h) }.select_to(handle, f64::from(x), f64::from(y)))
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_clearSelection(_: JNIEnv, _: JClass, h: jlong) {
+    unsafe { viewer(h) }.clear_selection();
+}
+
+/// The selected text, or null.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_selectionText(mut env: JNIEnv, _: JClass, h: jlong) -> jstring {
+    match unsafe { viewer(h) }.selection_text() {
+        Some(t) => new_string(&mut env, &t),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// The selection handles' places in the view: start x, y, end x, y; null without a selection.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_selectionHandles(env: JNIEnv, _: JClass, h: jlong) -> jfloatArray {
+    match unsafe { viewer(h) }.selection_handles() {
+        Some(p) => floats(env, &p),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// What the document says about itself: lines of label and value, tab-separated.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_info(mut env: JNIEnv, _: JClass, h: jlong) -> jstring {
+    let text = guard(String::new(), || unsafe { viewer(h) }.info());
+    new_string(&mut env, &text)
+}
+
+/// Saves the first page, `width` pixels wide, as a PNG at `path` for the start page, on a thread of
+/// its own.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_saveThumbnail(mut env: JNIEnv, _: JClass, h: jlong, path: JString, width: jint) {
+    let path = string(&mut env, &path);
+    let engine = unsafe { viewer(h) }.engine();
+    let width = width.clamp(16, 1024) as u32;
+    std::thread::spawn(move || {
+        let saved = catch_unwind(AssertUnwindSafe(|| thumbnail(&*engine, Path::new(&path), width)));
+        if !matches!(saved, Ok(Ok(()))) {
+            log("can't save a thumbnail");
+        }
+    });
+}
+
+fn thumbnail(engine: &dyn engine::Engine, path: &Path, width: u32) -> std::io::Result<()> {
+    let size = engine.page_size(0);
+    let scale = width as f32 / size.width.max(1.0);
+    // a very tall page is cut at twice its width; the start page shows its top
+    let height = ((size.height * scale).round() as u32).clamp(1, width * 2);
+    let pixels = engine.renderer().render(0, scale, engine::PixelRect { x: 0, y: 0, width, height });
+    let rgb: Vec<u8> = pixels.iter().flat_map(|p| [(p >> 16) as u8, (p >> 8) as u8, *p as u8]).collect();
+    let part = path.with_extension("part");
+    {
+        let file = std::io::BufWriter::new(File::create(&part)?);
+        let mut encoder = png::Encoder::new(file, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().and_then(|mut w| w.write_image_data(&rgb)).map_err(std::io::Error::other)?;
+    }
+    std::fs::rename(&part, path)
+}
