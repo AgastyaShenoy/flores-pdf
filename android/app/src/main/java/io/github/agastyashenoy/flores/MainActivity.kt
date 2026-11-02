@@ -131,7 +131,7 @@ class MainActivity : Activity() {
                 imageTintList = android.content.res.ColorStateList.valueOf(color(R.color.accent))
             }, LinearLayout.LayoutParams(dp(24f), dp(24f)).apply { marginEnd = dp(16f) })
             addView(words, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-            setOnClickListener { read(Uri.parse(r.uri)) }
+            setOnClickListener { read(Uri.parse(r.uri), r.name) }
             setOnLongClickListener {
                 AlertDialog.Builder(context)
                     .setTitle(r.name)
@@ -168,8 +168,11 @@ class MainActivity : Activity() {
         read(uri)
     }
 
-    private fun read(uri: Uri) {
-        startActivity(Intent(this, ReaderActivity::class.java).setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    /** Opens [uri] in the reader; [name] is the file's name, when it's known already. */
+    private fun read(uri: Uri, name: String? = null) {
+        // no FLAG_GRANT_READ_URI_PERMISSION: the reader is this app, and passing on a permission the
+        // app no longer holds (one a sharing app gave for one use) throws
+        startActivity(Intent(this, ReaderActivity::class.java).setData(uri).putExtra(ReaderActivity.NAME, name))
     }
 
     private fun releaseAccess(uri: String) {

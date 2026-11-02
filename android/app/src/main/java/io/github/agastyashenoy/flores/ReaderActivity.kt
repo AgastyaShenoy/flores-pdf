@@ -34,6 +34,10 @@ import android.window.OnBackInvokedDispatcher
 class ReaderActivity : Activity(), PageView.Listener {
     private lateinit var recents: Recents
     private lateinit var uri: Uri
+    /** A copy of a file shared for one use has been made, or wasn't needed. */
+    private var copied = false
+    /** The file's app no longer lets Flores read it. */
+    private var denied = false
     private lateinit var pages: PageView
     private lateinit var topBar: LinearLayout
     private lateinit var tools: LinearLayout
@@ -59,7 +63,8 @@ class ReaderActivity : Activity(), PageView.Listener {
         super.onCreate(savedInstanceState)
         recents = Recents(this)
         uri = intent.data ?: run { finish(); return }
-        name = displayName(uri)
+        // the recent list knows the name even when the file's app no longer answers
+        name = intent.getStringExtra(NAME) ?: displayName(uri)
         edgeToEdge()
         preferFastRefresh()
         build()
@@ -157,6 +162,8 @@ class ReaderActivity : Activity(), PageView.Listener {
         val root = FrameLayout(this).apply {
             setBackgroundColor(color(R.color.background))
             addView(pages, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            // an empty surface is black: shown once there's a document to draw
+            pages.visibility = View.INVISIBLE
             addView(note, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.CENTER))
             addView(topBar, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.TOP))
             addView(bottomBar, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT, Gravity.BOTTOM))
@@ -188,9 +195,19 @@ class ReaderActivity : Activity(), PageView.Listener {
         note.text = "Opening…"
         note.visibility = View.VISIBLE
         val gap = dp(6f)
+        val shared = intent.action == Intent.ACTION_VIEW && !copied
+        copied = true
         Thread {
+            // an app that lets Flores read the file just this once: open a copy, which the recent
+            // list can open again
+            if (shared && !Received.lasting(this, uri)) {
+                Received.copy(this, uri, name)?.let { uri = it }
+            }
             val fd = try {
                 contentResolver.openFileDescriptor(uri, "r")
+            } catch (e: SecurityException) {
+                denied = true
+                null
             } catch (e: Exception) {
                 android.util.Log.w("Flores", "can't open $uri", e)
                 null
@@ -226,6 +243,7 @@ class ReaderActivity : Activity(), PageView.Listener {
         bottomBar.visibility = if (count > 1) View.VISIBLE else View.GONE
         note.visibility = View.GONE
         applyLook()
+        pages.visibility = View.VISIBLE
         pages.attach(h)
     }
 
@@ -251,10 +269,15 @@ class ReaderActivity : Activity(), PageView.Listener {
     }
 
     private fun failed(code: Long) {
-        note.text = when (code) {
-            Native.UNSUPPORTED -> "Flores PDF can't read this kind of file."
-            Native.ENCRYPTED -> "This document is encrypted in a way Flores PDF can't open."
-            Native.DAMAGED -> "This file is damaged."
+        if (denied) {
+            // it can't be opened from the list again, so it leaves it
+            recents.remove(uri.toString())
+        }
+        note.text = when {
+            denied -> "The app this file came from let Flores PDF open it only once. Open it from that app again."
+            code == Native.UNSUPPORTED -> "Flores PDF can't read this kind of file."
+            code == Native.ENCRYPTED -> "This document is encrypted in a way Flores PDF can't open."
+            code == Native.DAMAGED -> "This file is damaged."
             else -> "Flores PDF can't get at this file. It may have been moved or deleted."
         }
         note.visibility = View.VISIBLE
@@ -547,5 +570,10 @@ class ReaderActivity : Activity(), PageView.Listener {
         handle = 0L
         file?.close()
         file = null
+    }
+
+    companion object {
+        /** The intent extra with the file's name, from the recent list. */
+        const val NAME = "name"
     }
 }

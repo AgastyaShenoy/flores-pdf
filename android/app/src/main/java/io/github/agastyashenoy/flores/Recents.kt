@@ -15,6 +15,7 @@ data class Recent(
 
 /** Recently opened files, newest first, and the reader's settings, in shared preferences. */
 class Recents(context: Context) {
+    private val context = context.applicationContext
     private val prefs = context.getSharedPreferences("flores", Context.MODE_PRIVATE)
 
     fun list(): List<Recent> = prefs.getString(KEY, "").orEmpty().lineSequence().mapNotNull { line ->
@@ -40,6 +41,7 @@ class Recents(context: Context) {
             listOf(it.uri, clean(it.name), it.page, it.offset, it.zoom, it.pages, it.opened).joinToString("\t")
         }
         prefs.edit().putString(KEY, text).apply()
+        Received.prune(context, list.take(MAX).map { it.uri }.toSet())
     }
 
     /** Page colors: 0 normal, 1 dark, 2 sepia, 3 black. */
