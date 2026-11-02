@@ -33,8 +33,8 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 
-// The custom interface's toolkit: its colors, and widgets built in code from the platform's own
-// views, in the manner of Flax Reader. No layouts to inflate and no libraries.
+// The interface's toolkit: its colors, and widgets built in code from the platform's own views, in
+// the manner of Flax Reader. No layouts to inflate and no libraries, so screens open at once.
 
 /** One color theme. */
 class Pal(

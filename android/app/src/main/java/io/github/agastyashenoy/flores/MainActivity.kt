@@ -21,8 +21,8 @@ import android.window.OnBackInvokedDispatcher
 import java.util.concurrent.Executors
 
 /**
- * The custom interface's one activity. Screens are views swapped in and out of it, as in Flax
- * Reader: the start page, settings, and the reader, which slides in over the start page.
+ * The app's one activity. Screens are views swapped in and out of it, as in Flax Reader: the start
+ * page, settings, and the reader, which slides in over the start page.
  */
 class MainActivity : Activity() {
     lateinit var recents: Recents

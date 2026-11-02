@@ -250,14 +250,18 @@ Set `version` in `Cargo.toml`, build both exes, and attach `FloresPDF-Setup.exe`
 
 ## 📱 Android
 
-An early Android version lives in `android/`, for Android 8 and later. It renders pages with the same engine and renderer as the Windows app: the tiles, render threads, display lists and glyph cache, and the Normal, Dark, Sepia and Black page colors. The GPU (OpenGL ES) puts the rendered tiles on screen, so scrolling keeps up with the display's full refresh rate: a steady 144 fps on a Xiaomi Pad 6. Around the pages is a plain Android UI:
+An early Android version lives in `android/`, for Android 8 and later. It renders pages with the same engine and renderer as the Windows app: the tiles, render threads, display lists and glyph cache, and the Normal, Dark, Sepia and Black page colors. The GPU (OpenGL ES) puts the rendered tiles on screen, so scrolling keeps up with the display's full refresh rate: a steady 144 fps on a Xiaomi Pad 6. The interface is built from Android's own views, with no AndroidX or other libraries, in one activity whose screens and panels are views, so everything opens at once:
 
 - PDF, EPUB, DjVu, CBZ and CB7 comics, and pictures, from the system's file picker or from other apps. CBR comics aren't supported yet, because UnRAR's build can't cross-compile from Windows.
 - Smooth scrolling and flinging, pinch and double-tap zoom, and a page slider.
-- Contents, links (Back returns from them), search with every match highlighted, and go to page.
-- Recent files reopen where you left them. Password-protected PDFs ask for the password. The volume keys turn pages.
+- Contents, bookmarks, links (Back returns from them), search with every match highlighted, and go to page.
+- One page, two pages or book layout, and rotation.
+- Select text with a long press and its handles, then copy, share or find it.
+- A start page with a picture of each recent file, which reopens where you left it; keep 10 to 50. Files shared from other apps for one use, as WhatsApp does, are kept as private copies so they reopen too.
+- Settings: System, Light, Dark or Black theme, page colors, keeping the screen on, and the volume keys turning pages.
+- Password-protected PDFs ask for the password. Document properties.
 
-Annotations, forms, printing and settings are Windows-only for now.
+Annotations, forms and printing are Windows-only for now.
 
 To build it you need the Android SDK and NDK (Android Studio installs both) and Rust's Android targets:
 

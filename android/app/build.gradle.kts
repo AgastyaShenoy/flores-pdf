@@ -13,24 +13,8 @@ android {
         applicationId = "io.github.agastyashenoy.flores"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.0-beta.2"
-    }
-
-    // Two interfaces over the same engine, to compare: Material 3 (Google's components, AndroidX)
-    // and custom (platform views only, as Flax Reader does). They install side by side.
-    flavorDimensions += "ui"
-    productFlavors {
-        create("material") {
-            dimension = "ui"
-            applicationIdSuffix = ".material"
-            resValue("string", "app_name", "Flores Material")
-        }
-        create("custom") {
-            dimension = "ui"
-            applicationIdSuffix = ".custom"
-            resValue("string", "app_name", "Flores Custom")
-        }
+        versionCode = 3
+        versionName = "1.0.0-beta.3"
     }
 
     buildTypes {
@@ -64,11 +48,6 @@ kotlin {
     }
 }
 
-// The material interface: Material 3, which brings AppCompat and the rest of AndroidX it needs. The
-// custom one uses none.
+// No AndroidX or other libraries: the interface is built from the platform's own views (Kit.kt).
 dependencies {
-    "materialImplementation"("com.google.android.material:material:1.12.0")
-    "materialImplementation"("androidx.appcompat:appcompat:1.7.0")
-    "materialImplementation"("androidx.activity:activity:1.9.3")
-    "materialImplementation"("androidx.recyclerview:recyclerview:1.3.2")
 }
