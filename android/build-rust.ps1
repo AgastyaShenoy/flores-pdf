@@ -33,5 +33,8 @@ foreach ($t in $targets.Keys) {
     $dir = Join-Path $jni $targets[$t]
     New-Item -ItemType Directory -Force $dir | Out-Null
     Copy-Item "$root\target\$t\release\libflores.so" "$dir\libflores.so" -Force
+    # PDFium, for writing annotations into PDFs, where there's a build of it for this ABI
+    $pdfium = Join-Path $root "third_party\pdfium\android\$($targets[$t])\libpdfium.so"
+    if (Test-Path $pdfium) { Copy-Item $pdfium "$dir\libpdfium.so" -Force }
     '{0,-12} {1:N0} KB' -f $targets[$t], ((Get-Item "$dir\libflores.so").Length / 1KB)
 }

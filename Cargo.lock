@@ -620,6 +620,7 @@ version = "1.0.0"
 dependencies = [
  "engine",
  "jni 0.21.1",
+ "pdfium-write",
  "png 0.18.1",
  "render",
 ]
@@ -632,6 +633,7 @@ dependencies = [
  "kurbo",
  "memmap2",
  "miniz_oxide 0.8.9",
+ "pdfium-write",
  "png 0.18.1",
  "render",
  "skrifa 0.46.2",
@@ -1466,6 +1468,10 @@ checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
 dependencies = [
  "ttf-parser",
 ]
+
+[[package]]
+name = "pdfium-write"
+version = "1.0.0"
 
 [[package]]
 name = "peniko"

@@ -69,6 +69,21 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
     private var selecting = false
     private var dragging = 1
 
+    // Annotating: a bar of tools in place of the page slider; one finger draws, two move the pages.
+    private var annotating = false
+    private var tool = HIGHLIGHT
+    private var color = COLORS[0]
+    private var lineWidth = WIDTHS[1]
+    /** A markup tool's drag has text selected, and where it started. */
+    private var marking = false
+    private var markFrom = FloatArray(2)
+    private var boxFrom: FloatArray? = null
+    private val annotBar = a.column().apply {
+        setBackgroundColor(p.bar)
+        visibility = View.GONE
+    }
+    private val boxPreview = View(a).apply { visibility = View.GONE }
+
     init {
         view.setBackgroundColor(Looks.around(p, recents.look) or (0xFF shl 24))
         // an empty surface is black: shown once there's a document to draw
@@ -76,7 +91,7 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
         view.addView(pages, frame())
         view.addView(note, frame(h = -2, gravity = Gravity.CENTER))
 
-        tools.addView(a.iconButton(p, R.drawable.ic_back, "Back") { a.closeReader() })
+        tools.addView(a.iconButton(p, R.drawable.ic_back, "Back") { a.requestCloseReader() })
         tools.addView(titleView, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = a.dp(4f) })
         tools.addView(a.iconButton(p, R.drawable.ic_search, "Search") { startSearch() })
         tools.addView(a.iconButton(p, R.drawable.ic_contents, "Contents and bookmarks") { contents() })
@@ -132,15 +147,21 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
             addView(a.button(p, "Copy", Kind.Ghost) { copySelection() })
             addView(a.button(p, "Share", Kind.Ghost) { shareSelection() })
             addView(a.button(p, "Find", Kind.Ghost) { findSelection() })
+            addView(a.button(p, "Highlight", Kind.Ghost) { highlightSelection() })
         }
         view.addView(selectionBar, FrameLayout.LayoutParams(-2, -2))
+        view.addView(boxPreview, FrameLayout.LayoutParams(0, 0))
+        view.addView(annotBar, frame(h = -2, gravity = Gravity.BOTTOM))
     }
 
     /** Pads the bars clear of the system's. */
     fun insets(b: IntArray) {
         // keep the bars' room while the system's are hidden, so they don't jump
         if (b[1] > 0) top.setPadding(b[0], b[1], b[2], 0)
-        if (b[3] > 0 || b[0] > 0 || b[2] > 0) bottom.setPadding(b[0] + a.dp(16f), a.dp(4f), b[2] + a.dp(16f), b[3] + a.dp(4f))
+        if (b[3] > 0 || b[0] > 0 || b[2] > 0) {
+            bottom.setPadding(b[0] + a.dp(16f), a.dp(4f), b[2] + a.dp(16f), b[3] + a.dp(4f))
+            annotBar.setPadding(b[0] + a.dp(8f), a.dp(4f), b[2] + a.dp(8f), b[3] + a.dp(4f))
+        }
     }
 
     private fun displayName(uri: Uri): String {
@@ -308,6 +329,259 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
     }
 
     override fun onSelectEnd() = placeSelection(true)
+
+    // Annotating
+
+    override fun onDraw(action: Int, x: Float, y: Float) {
+        val h = handle
+        if (h == 0L) return
+        when (tool) {
+            HIGHLIGHT, UNDERLINE, STRIKEOUT -> when (action) {
+                // the drag selects text from where it starts, and letting go marks it
+                0 -> {
+                    markFrom = floatArrayOf(x, y)
+                    marking = Native.selectWord(h, x, y)
+                }
+                1 -> if (marking) {
+                    Native.selectTo(h, 1, x, y)
+                } else if (Native.selectWord(h, x, y)) {
+                    // the drag began off the text: the marking begins where it did
+                    marking = true
+                    Native.selectTo(h, 0, markFrom[0], markFrom[1])
+                }
+                2 -> {
+                    if (marking) Native.markSelection(h, tool, color)
+                    marking = false
+                }
+            }
+            PEN -> when (action) {
+                0 -> Native.penDown(h, x, y, color, lineWidth)
+                1 -> Native.penMove(h, x, y)
+                2 -> Native.penUp(h)
+            }
+            BOX -> when (action) {
+                0 -> boxFrom = floatArrayOf(x, y)
+                1 -> boxFrom?.let { showBox(it[0], it[1], x, y) }
+                2 -> {
+                    boxFrom?.let { Native.addRect(h, it[0], it[1], x, y, color, lineWidth) }
+                    boxFrom = null
+                    boxPreview.visibility = View.GONE
+                }
+            }
+            NOTE -> if (action == 2) {
+                a.ask(p, "Add a note", hint = "Note", ok = "Add") { text ->
+                    if (text.isNotBlank() && Native.addNote(h, x, y, text.trim(), color)) changed()
+                }
+            }
+            ERASER -> if (action == 2) {
+                when (Native.eraseAt(h, x, y)) {
+                    -1 -> Toast.makeText(a, "Flores PDF couldn't remove that annotation.", Toast.LENGTH_SHORT).show()
+                    0 -> {}
+                    else -> changed()
+                }
+            }
+        }
+        pages.redraw()
+        if (action == 2) changed()
+    }
+
+    override fun onDrawCancel() {
+        val h = handle
+        if (h == 0L) return
+        Native.penCancel(h)
+        if (marking) Native.clearSelection(h)
+        marking = false
+        boxFrom = null
+        boxPreview.visibility = View.GONE
+        pages.redraw()
+    }
+
+    /** The rectangle being dragged out, before it's made. */
+    private fun showBox(x0: Float, y0: Float, x1: Float, y1: Float) {
+        val stroke = (lineWidth * 2).coerceAtLeast(2f).toInt()
+        boxPreview.background = rounded(0, 0f, color or (0xFF shl 24), stroke)
+        boxPreview.x = minOf(x0, x1)
+        boxPreview.y = minOf(y0, y1)
+        boxPreview.layoutParams = boxPreview.layoutParams.apply {
+            this.width = kotlin.math.abs(x1 - x0).toInt()
+            height = kotlin.math.abs(y1 - y0).toInt()
+        }
+        boxPreview.visibility = View.VISIBLE
+    }
+
+    private fun startAnnotating() {
+        if (handle == 0L) return
+        clearSelection()
+        if (searching) endSearch()
+        annotating = true
+        pages.drawing = true
+        if (!barsShown) showBars(true)
+        bottom.visibility = View.GONE
+        buildAnnotBar()
+        annotBar.visibility = View.VISIBLE
+        Anim.enter(annotBar, dy = a.dpf(12f), ms = 180)
+        annotBar.post { Native.setInsets(handle, top.height.toFloat(), annotBar.height.toFloat()) }
+    }
+
+    private fun stopAnnotating() {
+        annotating = false
+        pages.drawing = false
+        onDrawCancel()
+        annotBar.visibility = View.GONE
+        if (count > 1) bottom.visibility = View.VISIBLE
+        Native.setInsets(handle, top.height.toFloat(), if (count > 1) bottom.height.toFloat() else 0f)
+        pages.redraw()
+    }
+
+    /** After a change: the bar's Undo and Save follow it. */
+    private fun changed() {
+        if (annotating) buildAnnotBar()
+    }
+
+    /** Tools, then colors and widths, undo, save and done. */
+    private fun buildAnnotBar() {
+        annotBar.removeAllViews()
+        val tools = a.row().apply { gravity = Gravity.CENTER }
+        for ((i, pair) in TOOLS.withIndex()) {
+            val (icon, label) = pair
+            val b = a.iconButton(p, icon, label) {
+                tool = i
+                onDrawCancel()
+                buildAnnotBar()
+            }
+            if (i == tool) b.background = rounded(p.selected, a.dpf(24f))
+            tools.addView(b)
+        }
+        annotBar.addView(android.widget.HorizontalScrollView(a).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tools)
+        }, lp().apply { gravity = Gravity.CENTER_HORIZONTAL })
+        val row = a.row().apply { setPadding(a.dp(8f), 0, a.dp(4f), 0) }
+        for (c in COLORS) {
+            row.addView(View(a).apply {
+                val on = c == color
+                background = android.graphics.drawable.LayerDrawable(arrayOf(
+                    android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(c or (0xFF shl 24))
+                        setStroke(a.dp(if (on) 3f else 1f), if (on) p.text else p.border)
+                    },
+                ))
+                contentDescription = "Color"
+                setOnClickListener {
+                    color = c
+                    buildAnnotBar()
+                }
+            }, LinearLayout.LayoutParams(a.dp(28f), a.dp(28f)).apply { setMargins(a.dp(4f), a.dp(8f), a.dp(4f), a.dp(8f)) })
+        }
+        if (tool == PEN || tool == BOX) {
+            row.addView(View(a), LinearLayout.LayoutParams(a.dp(8f), 1))
+            for (w in WIDTHS) {
+                val dot = a.dp(4f + w * 2.4f)
+                val box = FrameLayout(a).apply {
+                    if (w == lineWidth) background = rounded(p.selected, a.dpf(18f))
+                    addView(View(a).apply {
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(p.text)
+                        }
+                    }, FrameLayout.LayoutParams(dot, dot, Gravity.CENTER))
+                    contentDescription = "Line width"
+                    setOnClickListener {
+                        lineWidth = w
+                        buildAnnotBar()
+                    }
+                }
+                row.addView(box, LinearLayout.LayoutParams(a.dp(36f), a.dp(36f)))
+            }
+        }
+        row.addView(View(a), LinearLayout.LayoutParams(0, 1, 1f))
+        row.addView(a.iconButton(p, R.drawable.ic_undo, "Undo") {
+            if (Native.undo(handle)) {
+                pages.redraw()
+                changed()
+            }
+        }.apply { alpha = if (Native.changed(handle)) 1f else 0.4f })
+        row.addView(a.iconButton(p, R.drawable.ic_save, "Save") { save() }.apply { alpha = if (Native.changed(handle)) 1f else 0.4f })
+        row.addView(a.iconButton(p, R.drawable.ic_check, "Done") { stopAnnotating() })
+        annotBar.addView(row)
+    }
+
+    private fun highlightSelection() {
+        if (Native.markSelection(handle, HIGHLIGHT, COLORS[0])) {
+            clearSelection()
+            Toast.makeText(a, "Highlighted. Save it from the ⋮ menu.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Saving
+
+    /** Writes the changes into the file, or, when Android won't let Flores write it, into a copy
+     *  that then opens in its place. [after] runs once they're saved into the file. */
+    fun save(after: (() -> Unit)? = null) {
+        val h = handle
+        if (h == 0L || !Native.changed(h)) {
+            after?.invoke()
+            return
+        }
+        Native.savePrepare(h)?.let {
+            Toast.makeText(a, "Flores PDF couldn't save: $it", Toast.LENGTH_LONG).show()
+            return
+        }
+        val out = try {
+            a.contentResolver.openFileDescriptor(uri, "rwt")
+        } catch (_: Exception) {
+            null
+        }
+        if (out == null) {
+            saveCopy(prepared = true)
+            return
+        }
+        val error = out.use { Native.saveWrite(h, it.fd, true) }
+        if (error != null) {
+            Toast.makeText(a, "Flores PDF couldn't save: $error", Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(a, "Saved", Toast.LENGTH_SHORT).show()
+        // the start page's picture shows the saved first page
+        Native.saveThumbnail(h, Recents.thumbnail(a, uri.toString()).path, 360)
+        changed()
+        pages.redraw()
+        after?.invoke()
+    }
+
+    /** Writes the changes into a new file the user picks, then opens that. */
+    fun saveCopy(prepared: Boolean = false) {
+        val h = handle
+        if (h == 0L) return
+        if (!prepared) Native.savePrepare(h)?.let {
+            Toast.makeText(a, "Flores PDF couldn't save: $it", Toast.LENGTH_LONG).show()
+            return
+        }
+        val suggested = name.substringBeforeLast('.') + " (annotated).pdf"
+        a.createDocument(suggested) { target ->
+            val error = try {
+                a.contentResolver.openFileDescriptor(target, "rwt")?.use { Native.saveWrite(handle, it.fd, false) } ?: "the new file can't be written"
+            } catch (e: Exception) {
+                e.message ?: "the new file can't be written"
+            }
+            if (error != null) {
+                Toast.makeText(a, "Flores PDF couldn't save: $error", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(a, "Saved as a copy", Toast.LENGTH_SHORT).show()
+                a.openReader(target, null, shared = false, discard = true)
+            }
+        }
+    }
+
+    /** Runs [then] once the reader can close: changes saved or let go, after asking. */
+    fun confirmClose(then: () -> Unit) {
+        val h = handle
+        if (h == 0L || !Native.changed(h)) return then()
+        a.ask(p, "Save your annotations?", "$name has changes that aren't saved yet.", ok = "Save", other = "Discard", onOther = then) {
+            save(then)
+        }
+    }
 
     private fun startSelection(showBar: Boolean) {
         selecting = true
@@ -513,6 +787,22 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
             rotate.findViewWithTag<TextView>("sub")?.text = "${rotation * 90}°"
         }
         body.addView(rotate)
+        if (Native.annotatable(handle)) {
+            body.addView(a.listRow(p, R.drawable.ic_pen, "Annotate", "Highlight, draw, add notes") {
+                a.panels.close()
+                startAnnotating()
+            })
+            if (Native.changed(handle)) {
+                body.addView(a.listRow(p, R.drawable.ic_save, "Save annotations") {
+                    a.panels.close()
+                    save()
+                })
+            }
+            body.addView(a.listRow(p, R.drawable.ic_save, "Save a copy") {
+                a.panels.close()
+                saveCopy()
+            })
+        }
         body.addView(a.listRow(p, R.drawable.ic_goto, "Go to page") {
             a.panels.close()
             a.ask(p, "Go to page", hint = "Page, 1 to $count", number = true, ok = "Go") { text ->
@@ -627,6 +917,10 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
             clearSelection()
             true
         }
+        annotating -> {
+            stopAnnotating()
+            true
+        }
         searching -> {
             endSearch()
             true
@@ -647,5 +941,28 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
         Native.scrollBy(h, 0f, if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) screen else -screen)
         pages.redraw()
         return true
+    }
+
+    companion object {
+        const val HIGHLIGHT = 0
+        const val UNDERLINE = 1
+        const val STRIKEOUT = 2
+        const val PEN = 3
+        const val BOX = 4
+        const val NOTE = 5
+        const val ERASER = 6
+        private val TOOLS = listOf(
+            R.drawable.ic_highlight to "Highlight text",
+            R.drawable.ic_underline to "Underline text",
+            R.drawable.ic_strike to "Strike out text",
+            R.drawable.ic_pen to "Draw",
+            R.drawable.ic_box to "Rectangle",
+            R.drawable.ic_note to "Add a note",
+            R.drawable.ic_eraser to "Erase annotations",
+        )
+        /** The Windows app's: four highlight colors, red and black. */
+        private val COLORS = intArrayOf(0xFFE14D, 0x7CDB6E, 0x6EC6FF, 0xFF8AC8, 0xE53935, 0x1B1B1B)
+        /** Line widths, in points. */
+        private val WIDTHS = floatArrayOf(1f, 2.5f, 5f)
     }
 }

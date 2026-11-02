@@ -35,6 +35,10 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
         fun onLongPress(x: Float, y: Float): Boolean
         fun onSelectDrag(x: Float, y: Float)
         fun onSelectEnd()
+        /** While [drawing]: one finger down (0), moving (1) or lifted (2) at (x, y). */
+        fun onDraw(action: Int, x: Float, y: Float)
+        /** The finger's line is dropped: a second finger came down, to zoom or move. */
+        fun onDrawCancel()
     }
 
     private var handle = 0L
@@ -46,6 +50,9 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
     private var zooming: ValueAnimator? = null
     /** A long press started selecting: the finger drags the selection's end, not the pages. */
     private var selecting = false
+    /** Annotating: one finger draws or marks, two still zoom and move the pages. */
+    var drawing = false
+    private var twoFingers = false
 
     init {
         holder.addCallback(this)
@@ -239,6 +246,28 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
                     listener.onSelectEnd()
                 }
             }
+            return true
+        }
+        if (drawing) {
+            if (event.pointerCount > 1 && !twoFingers) {
+                twoFingers = true
+                listener.onDrawCancel()
+            }
+            if (!twoFingers) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        scroller.forceFinished(true)
+                        listener.onDraw(0, event.x, event.y)
+                    }
+                    MotionEvent.ACTION_MOVE -> listener.onDraw(1, event.x, event.y)
+                    MotionEvent.ACTION_UP -> listener.onDraw(2, event.x, event.y)
+                    MotionEvent.ACTION_CANCEL -> listener.onDrawCancel()
+                }
+                return true
+            }
+            scale.onTouchEvent(event)
+            gestures.onTouchEvent(event)
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) twoFingers = false
             return true
         }
         scale.onTouchEvent(event)

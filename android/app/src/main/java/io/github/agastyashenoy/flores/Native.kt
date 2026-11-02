@@ -75,6 +75,28 @@ object Native {
     /** Saves the first page, [width] pixels wide, as a PNG at [path], in the background. */
     @JvmStatic external fun saveThumbnail(h: Long, path: String, width: Int)
 
+    // Annotations: made here and drawn over the pages, then written into the PDF by PDFium on saving.
+
+    /** Whether annotations can be made: the document is a PDF. */
+    @JvmStatic external fun annotatable(h: Long): Boolean
+    /** Highlights (0), underlines (1) or strikes out (2) the selected text in [color], 0xRRGGBB. */
+    @JvmStatic external fun markSelection(h: Long, kind: Int, color: Int): Boolean
+    @JvmStatic external fun penDown(h: Long, x: Float, y: Float, color: Int, width: Float)
+    @JvmStatic external fun penMove(h: Long, x: Float, y: Float)
+    @JvmStatic external fun penUp(h: Long)
+    @JvmStatic external fun penCancel(h: Long)
+    @JvmStatic external fun addNote(h: Long, x: Float, y: Float, text: String, color: Int): Boolean
+    @JvmStatic external fun addRect(h: Long, x0: Float, y0: Float, x1: Float, y1: Float, color: Int, width: Float): Boolean
+    /** 1 a mark made here, 2 an annotation of the PDF, 0 nothing there, -1 failed. */
+    @JvmStatic external fun eraseAt(h: Long, x: Float, y: Float): Int
+    @JvmStatic external fun undo(h: Long): Boolean
+    /** Whether there are changes not saved. */
+    @JvmStatic external fun changed(h: Long): Boolean
+    /** Makes the document to save, before its file is opened to write; null, or what went wrong. */
+    @JvmStatic external fun savePrepare(h: Long): String?
+    /** Writes it into [fd]; [same]: the document's own file. Null, or what went wrong. */
+    @JvmStatic external fun saveWrite(h: Long, fd: Int, same: Boolean): String?
+
     @JvmStatic external fun search(h: Long, query: String)
     /** Matches found, pages searched, pages, current match (-1 for none). */
     @JvmStatic external fun searchStatus(h: Long): IntArray

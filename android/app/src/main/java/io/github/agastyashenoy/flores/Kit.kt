@@ -376,6 +376,8 @@ fun Activity.ask(
     number: Boolean = false,
     password: Boolean = false,
     ok: String,
+    other: String? = null,
+    onOther: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     onOk: (String) -> Unit,
 ) {
@@ -414,6 +416,15 @@ fun Activity.ask(
         done = true
         d.dismiss()
         onOk(field?.text?.toString().orEmpty())
+    }
+    if (other != null) {
+        // a second way out, such as Discard, on its own at the start
+        buttons.addView(button(p, other, Kind.Ghost) {
+            done = true
+            d.dismiss()
+            onOther?.invoke()
+        })
+        buttons.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
     }
     buttons.addView(button(p, "Cancel", Kind.Ghost) { d.cancel() })
     buttons.addView(button(p, ok, Kind.Primary) { confirm() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8f) })

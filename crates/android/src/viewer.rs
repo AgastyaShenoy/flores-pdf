@@ -2,10 +2,13 @@
 //! search, and drawing a frame. The Android app calls in on its UI thread only.
 
 use crate::gpu::Gpu;
+use crate::marks::{Mark, Markup, Piece, Shape};
 use crate::window::Window;
 use engine::{Engine, OutlineItem, PageSize, PageText, Target};
 use render::text::{self, TextWorker};
 use render::{Layout, Look, RenderPool, Spread, TILE, TileCache, TileKey, Viewport};
+use std::fs::File;
+use std::os::unix::fs::FileExt;
 use std::sync::Arc;
 
 /// Zoom is relative to the page width that fits the screen: 1 is fit width.
@@ -27,6 +30,21 @@ const FAILED: u32 = 0x00F4_CCCC;
 const UPLOADS: usize = 4;
 /// Textures kept, in halves of a screen's worth of pixels: the screen and a half of what's near it.
 const TEXTURE_HALF_SCREENS: usize = 3;
+
+/// Highlights blended over the page, as on Windows.
+const HIGHLIGHT_ALPHA: u32 = 110;
+/// Changes kept for undoing.
+const UNDO: usize = 100;
+
+/// A change to the document made here, to undo.
+enum Undo {
+    /// A mark was added: the last one.
+    Added,
+    /// A mark was erased from where it was in the list.
+    Erased(usize, Mark),
+    /// Annotations were taken out of the PDF: the document as it was.
+    Rewrote(Arc<Vec<u8>>),
+}
 
 /// What a tap on the page did.
 pub enum Tap {
@@ -87,10 +105,24 @@ pub struct Viewer {
     /// Selected text, on one page.
     selection: Option<Selection>,
     gpu: Option<Gpu>,
+    /// The file, read again to write annotations into it, and the password it was opened with.
+    source: Option<File>,
+    password: String,
+    /// The document as shown, when it isn't the file as first read: annotations taken out of it
+    /// (which can't be shown any other way), or the file as last saved here.
+    working: Option<Arc<Vec<u8>>>,
+    /// The working copy differs from the file.
+    edited: bool,
+    /// Annotations made here, not saved yet, and the freehand line being drawn.
+    marks: Vec<Mark>,
+    stroke: Option<Mark>,
+    undo: Vec<Undo>,
+    /// The document made for saving, between preparing and writing it.
+    prepared: Option<Vec<u8>>,
 }
 
 impl Viewer {
-    pub fn new(engine: Arc<dyn Engine>, gap: u32) -> Self {
+    pub fn new(engine: Arc<dyn Engine>, gap: u32, source: Option<File>, password: String) -> Self {
         let sizes: Vec<PageSize> = (0..engine.page_count()).map(|i| engine.page_size(i)).collect();
         let threads = std::thread::available_parallelism().map_or(2, |n| n.get() / 2).clamp(1, 4);
         // frames are polled while tiles are on their way, so the threads needn't wake anything
@@ -125,6 +157,14 @@ impl Viewer {
             spread: Spread::One,
             selection: None,
             gpu: None,
+            source,
+            password,
+            working: None,
+            edited: false,
+            marks: Vec::new(),
+            stroke: None,
+            undo: Vec::new(),
+            prepared: None,
         }
     }
 
@@ -270,6 +310,7 @@ impl Viewer {
                 gpu.image(&key, ox + area.x as f32, oy + area.y as f32, area.width as f32, area.height as f32);
             }
         }
+        self.draw_marks(&view);
         self.draw_highlights(&view);
         // text for selecting on the pages in view, ready before a finger asks for it
         let visible: Vec<usize> = self.layout.pages_between(view.y, view.y + i64::from(view.height)).collect();
@@ -662,6 +703,253 @@ impl Viewer {
             out.push_str(&format!("Page size\t{w:.0} × {h:.0} mm\n"));
         }
         out
+    }
+
+    // Annotations
+
+    /// Whether annotations can be made: PDFs only, whose pages have a transform to their own
+    /// coordinates.
+    pub fn annotatable(&self) -> bool {
+        self.engine.page_transform(0).is_some()
+    }
+
+    /// Marks made here and the line being drawn, over the pages in view.
+    fn draw_marks(&self, view: &Viewport) {
+        let Some(gpu) = &self.gpu else { return };
+        let pages = self.layout.pages_between(view.y, view.y + i64::from(view.height));
+        let scale = self.layout.scale;
+        let at = |page: usize, p: [f32; 2]| {
+            let (x, y) = self.to_doc(page, p[0], p[1]);
+            [(x - view.x as f64) as f32, (y - view.y as f64) as f32]
+        };
+        for m in self.marks.iter().chain(&self.stroke).filter(|m| pages.contains(&m.page)) {
+            for piece in m.pieces() {
+                match piece {
+                    Piece::Fill(r, color, alpha) => {
+                        let (x0, y0, x1, y1) = self.rect_to_doc(m.page, &r);
+                        let (x0, y0) = ((x0 - view.x as f64) as f32, (y0 - view.y as f64) as f32);
+                        let (x1, y1) = ((x1 - view.x as f64) as f32, (y1 - view.y as f64) as f32);
+                        let alpha = if alpha < 255 { HIGHLIGHT_ALPHA } else { 255 };
+                        gpu.fill(x0, y0, (x1 - x0).max(1.0), (y1 - y0).max(1.0), color, alpha);
+                    }
+                    Piece::Line(a, b, width, color) => gpu.line(at(m.page, a), at(m.page, b), width * scale, color, 255),
+                }
+            }
+        }
+    }
+
+    fn push_undo(&mut self, u: Undo) {
+        self.undo.push(u);
+        if self.undo.len() > UNDO {
+            self.undo.remove(0);
+        }
+    }
+
+    /// Marks the selected text: highlight (0), underline (1) or strike out (2), in `color`.
+    pub fn mark_selection(&mut self, kind: u8, color: u32) -> bool {
+        let Some(sel) = self.selection else { return false };
+        let Some(t) = self.text.text(sel.page) else { return false };
+        let rects = text::line_rects(&t, sel.start..sel.end);
+        if rects.is_empty() {
+            return false;
+        }
+        let kind = match kind {
+            1 => Markup::Underline,
+            2 => Markup::Strikeout,
+            _ => Markup::Highlight,
+        };
+        self.marks.push(Mark { page: sel.page, color, shape: Shape::Markup(kind, rects) });
+        self.push_undo(Undo::Added);
+        self.selection = None;
+        self.dirty = true;
+        true
+    }
+
+    /// Starts a freehand line at (x, y) in the view, `width` points wide.
+    pub fn pen_down(&mut self, x: f64, y: f64, color: u32, width: f32) {
+        self.stroke = self.page_point(x, y).map(|(page, px, py)| Mark { page, color, shape: Shape::Ink(vec![[px, py]], width) });
+        self.dirty = true;
+    }
+
+    pub fn pen_move(&mut self, x: f64, y: f64) {
+        let Some(page) = self.stroke.as_ref().map(|m| m.page) else { return };
+        // on the page the line started on, even past its edge
+        let p = self.from_doc(page, self.x + x, self.y + y);
+        if let Some(Mark { shape: Shape::Ink(points, _), .. }) = &mut self.stroke {
+            // a new point only when the finger has moved a little, so lines stay light
+            if points.last().is_none_or(|q| (q[0] - p.0).hypot(q[1] - p.1) * self.layout.scale >= 2.0) {
+                points.push([p.0, p.1]);
+                self.dirty = true;
+            }
+        }
+    }
+
+    pub fn pen_up(&mut self) {
+        if let Some(m) = self.stroke.take() {
+            self.marks.push(m);
+            self.push_undo(Undo::Added);
+        }
+        self.dirty = true;
+    }
+
+    /// Drops the line being drawn: a second finger came down to zoom.
+    pub fn pen_cancel(&mut self) {
+        if self.stroke.take().is_some() {
+            self.dirty = true;
+        }
+    }
+
+    /// Puts a note with `text` where (x, y) is in the view.
+    pub fn add_note(&mut self, x: f64, y: f64, text: &str, color: u32) -> bool {
+        let Some((page, px, py)) = self.page_point(x, y) else { return false };
+        let at = [px - crate::marks::NOTE_SIZE / 2.0, py - crate::marks::NOTE_SIZE / 2.0];
+        self.marks.push(Mark { page, color, shape: Shape::Note(at, text.to_owned()) });
+        self.push_undo(Undo::Added);
+        self.dirty = true;
+        true
+    }
+
+    /// A rectangle from (x0, y0) to (x1, y1) in the view, on the page the first is on.
+    pub fn add_rect(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, color: u32, width: f32) -> bool {
+        let Some((page, ax, ay)) = self.page_point(x0, y0) else { return false };
+        let (bx, by) = self.from_doc(page, self.x + x1, self.y + y1);
+        if (bx - ax).abs() < 2.0 || (by - ay).abs() < 2.0 {
+            return false;
+        }
+        self.marks.push(Mark { page, color, shape: Shape::Rect([ax.min(bx), ay.min(by), ax.max(bx), ay.max(by)], width) });
+        self.push_undo(Undo::Added);
+        self.dirty = true;
+        true
+    }
+
+    /// Erases what's at (x, y): a mark made here (1), or an annotation already in the PDF, taken
+    /// out of it (2). 0 when there's nothing; an error if PDFium can't take it out.
+    pub fn erase_at(&mut self, x: f64, y: f64) -> Result<u8, String> {
+        let Some((page, px, py)) = self.page_point(x, y) else { return Ok(0) };
+        if let Some(i) = self.marks.iter().rposition(|m| m.page == page && m.contains(px, py)) {
+            let m = self.marks.remove(i);
+            self.push_undo(Undo::Erased(i, m));
+            self.dirty = true;
+            return Ok(1);
+        }
+        let slack = (8.0 / self.layout.scale).max(2.0);
+        let hit = self.engine.page_annotations(page).into_iter().rev().find(|a| {
+            let r = a.rect;
+            px >= r[0].min(r[2]) - slack && px <= r[0].max(r[2]) + slack && py >= r[1].min(r[3]) - slack && py <= r[1].max(r[3]) + slack
+        });
+        let Some(a) = hit else { return Ok(0) };
+        let Some(t) = self.engine.page_transform(page) else { return Ok(0) };
+        let (p0, p1) = (crate::marks::to_pdf_point(t, [a.rect[0], a.rect[1]]), crate::marks::to_pdf_point(t, [a.rect[2], a.rect[3]]));
+        let rect = [p0[0].min(p1[0]), p0[1].min(p1[1]), p0[0].max(p1[0]), p0[1].max(p1[1])];
+        let before = self.bytes()?;
+        let removal = pdfium_write::Removal { page, index: a.index, rect };
+        let changes = pdfium_write::Changes { remove: std::slice::from_ref(&removal), ..Default::default() };
+        let after = crate::pdfium()?.apply(&before, Some(&self.password), &changes)?;
+        self.reload(after)?;
+        self.edited = true;
+        self.push_undo(Undo::Rewrote(before));
+        Ok(2)
+    }
+
+    /// Takes back the last change. False when there's none.
+    pub fn undo(&mut self) -> bool {
+        match self.undo.pop() {
+            Some(Undo::Added) => {
+                self.marks.pop();
+            }
+            Some(Undo::Erased(i, m)) => self.marks.insert(i.min(self.marks.len()), m),
+            Some(Undo::Rewrote(before)) => {
+                if self.reload_shared(before).is_err() {
+                    return false;
+                }
+                self.edited = true;
+            }
+            None => return false,
+        }
+        self.dirty = true;
+        true
+    }
+
+    /// Whether there are changes not saved.
+    pub fn changed(&self) -> bool {
+        !self.marks.is_empty() || self.edited
+    }
+
+    /// The document with the changes made here written in, for saving.
+    pub fn saved(&self) -> Result<Vec<u8>, String> {
+        let base = self.bytes()?;
+        if self.marks.is_empty() {
+            return Ok(base.to_vec());
+        }
+        let add: Vec<pdfium_write::NewAnnot> = self
+            .marks
+            .iter()
+            .filter_map(|m| Some(m.to_pdf(self.engine.page_transform(m.page)?)))
+            .collect();
+        let changes = pdfium_write::Changes { add: &add, ..Default::default() };
+        crate::pdfium()?.apply(&base, Some(&self.password), &changes)
+    }
+
+    pub fn prepare_save(&mut self) -> Result<(), String> {
+        self.prepared = Some(self.saved()?);
+        Ok(())
+    }
+
+    pub fn take_prepared(&mut self) -> Option<Vec<u8>> {
+        self.prepared.take()
+    }
+
+    /// After saving into the file: the document is as on disk again. What was saved stays the working
+    /// copy, since the file's provider may have replaced the file the reader was given.
+    pub fn saved_to_file(&mut self, data: Vec<u8>) -> Result<(), String> {
+        self.reload(data)?;
+        self.edited = false;
+        self.marks.clear();
+        self.undo.clear();
+        Ok(())
+    }
+
+    /// The document as it is now: the working copy, or the file read again.
+    fn bytes(&self) -> Result<Arc<Vec<u8>>, String> {
+        if let Some(w) = &self.working {
+            return Ok(w.clone());
+        }
+        let file = self.source.as_ref().ok_or("the file can't be read again")?;
+        let len = file.metadata().map_err(|e| e.to_string())?.len() as usize;
+        let mut data = vec![0; len];
+        let mut done = 0;
+        while done < len {
+            let n = file.read_at(&mut data[done..], done as u64).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            done += n;
+        }
+        data.truncate(done);
+        Ok(Arc::new(data))
+    }
+
+    fn reload(&mut self, data: Vec<u8>) -> Result<(), String> {
+        self.reload_shared(Arc::new(data))
+    }
+
+    /// Shows `data` in place of the document: the same pages, drawn again.
+    fn reload_shared(&mut self, data: Arc<Vec<u8>>) -> Result<(), String> {
+        let engine = engine::open_pdf_bytes(data.to_vec(), &self.password).map_err(|e| e.to_string())?;
+        let threads = std::thread::available_parallelism().map_or(2, |n| n.get() / 2).clamp(1, 4);
+        self.pool = RenderPool::new(engine.clone(), threads, || {});
+        self.text = TextWorker::new(engine.clone(), || {});
+        self.engine = engine;
+        self.cache = TileCache::default();
+        // the old text is gone with the old engine
+        self.selection = None;
+        self.current = None;
+        if let Some(gpu) = &mut self.gpu {
+            gpu.clear();
+        }
+        self.working = Some(data);
+        self.dirty = true;
+        Ok(())
     }
 
     /// The engine, for work on another thread such as a thumbnail.

@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 engine.workspace = true
 render.workspace = true
+pdfium-write.workspace = true
 softbuffer.workspace = true
 winit.workspace = true
 memmap2.workspace = true

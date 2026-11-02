@@ -231,6 +231,7 @@ The setup packs the `FloresPDF.exe` it finds in the same target folder, so build
 | `crates/engine` | The `Engine` trait, the PDF adapter (links, outline, properties, passwords, annotations), EPUB, DjVu, comics and pictures, display lists, glyph and image caches, and hayro's renderer layer (vendored in `src/raster`) |
 | `crates/render` | Page layout (spreads, rotation), tile cache, render threads, compositor, page colors, the text thread for search and selection |
 | `crates/app` | The window, tabs, toolbar, sidebar, menus, start page, settings window, annotations, forms and saving through PDFium, printing, updates (`FloresPDF.exe`) |
+| `crates/pdfium-write` | Filling in forms and writing annotations into PDFs through PDFium, shared by the Windows and Android apps |
 | `crates/setup` | `FloresPDF-Setup.exe`: holds the app, compressed, and installs it for the current user |
 | `crates/android` | `libflores.so`: the engine and renderer behind JNI for the Android app, drawing straight into its surface |
 | `android/` | The Android app (Kotlin, platform views only, no AndroidX) |
@@ -259,9 +260,10 @@ An early Android version lives in `android/`, for Android 8 and later. It render
 - Select text with a long press and its handles, then copy, share or find it.
 - A start page with a picture of each recent file, which reopens where you left it; keep 10 to 50. Files shared from other apps for one use, as WhatsApp does, are kept as private copies so they reopen too.
 - Settings: System, Light, Dark or Black theme, page colors, keeping the screen on, and the volume keys turning pages.
+- Annotations in PDFs: highlight, underline and strike out text, draw, rectangles, notes, an eraser that also takes out annotations already in the file, and undo. Saving writes them into the PDF through PDFium (`third_party/pdfium/android`), or into a copy when the file's app doesn't let Flores write it.
 - Password-protected PDFs ask for the password. Document properties.
 
-Annotations, forms and printing are Windows-only for now.
+Forms, text boxes, lines and arrows, and printing are Windows-only for now.
 
 To build it you need the Android SDK and NDK (Android Studio installs both) and Rust's Android targets:
 

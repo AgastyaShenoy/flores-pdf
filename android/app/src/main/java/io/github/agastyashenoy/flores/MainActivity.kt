@@ -167,21 +167,48 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         val uri = data?.data
-        if (requestCode != PICK || resultCode != RESULT_OK || uri == null) return
-        // so the recent list can open it again after a restart
+        if (resultCode != RESULT_OK || uri == null) return
+        // so the recent list can open it again after a restart, and annotations can be saved into it
+        // where the file's app lets Flores write it
+        val granted = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         try {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            contentResolver.takePersistableUriPermission(uri, granted)
         } catch (_: SecurityException) {
         }
-        openReader(uri, null, shared = false)
+        when (requestCode) {
+            PICK -> openReader(uri, null, shared = false)
+            CREATE -> created?.invoke(uri)
+        }
+        created = null
     }
 
     // Settings
 
     fun openSettings() {
+        val open = reader
+        if (open != null) {
+            open.confirmClose {
+                closeReader()
+                openSettings()
+            }
+            return
+        }
         settingsOpen = true
-        if (reader != null) closeReader()
         show(settings())
+    }
+
+    private var created: ((Uri) -> Unit)? = null
+
+    /** Asks where to save a new PDF, suggesting [name], and hands its address to [then]. */
+    @Suppress("DEPRECATION")
+    fun createDocument(name: String, then: (Uri) -> Unit) {
+        created = then
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        startActivityForResult(intent, CREATE)
     }
 
     private fun settings(): View = SettingsScreen(this, insets).view
@@ -191,7 +218,17 @@ class MainActivity : Activity() {
 
     // The reader
 
-    fun openReader(uri: Uri, name: String?, shared: Boolean) {
+    /** Opens a document in the reader; one open already closes first, asking about unsaved changes
+     *  unless [discard]. */
+    fun openReader(uri: Uri, name: String?, shared: Boolean, discard: Boolean = false) {
+        val open = reader
+        if (open != null && !discard) {
+            open.confirmClose {
+                closeReader(animate = false)
+                openReader(uri, name, shared)
+            }
+            return
+        }
         reader?.let { closeReader(animate = false) }
         val r = ReaderScreen(this, uri, name, shared)
         reader = r
@@ -199,6 +236,11 @@ class MainActivity : Activity() {
         r.insets(insets)
         Anim.enter(r.view, dy = dpf(28f), ms = 220)
         r.open()
+    }
+
+    /** Closes the reader, after asking about changes not saved. */
+    fun requestCloseReader() {
+        reader?.confirmClose { closeReader() } ?: closeReader()
     }
 
     fun closeReader(animate: Boolean = true) {
@@ -216,7 +258,7 @@ class MainActivity : Activity() {
         when {
             panels.open -> panels.close()
             reader?.back() == true -> {}
-            reader != null -> closeReader()
+            reader != null -> requestCloseReader()
             settingsOpen -> {
                 settingsOpen = false
                 show(start())
@@ -243,6 +285,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PICK = 1
+        private const val CREATE = 2
         private val MIME_TYPES = arrayOf(
             "application/pdf", "application/epub+zip", "image/vnd.djvu", "image/x-djvu",
             "application/vnd.comicbook+zip", "application/x-cbz", "application/x-cb7", "application/zip",

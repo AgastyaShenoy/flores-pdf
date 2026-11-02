@@ -4,6 +4,7 @@
 #![cfg(target_os = "android")]
 
 mod gpu;
+mod marks;
 mod viewer;
 mod window;
 
@@ -28,6 +29,33 @@ const UNREADABLE: jlong = -5;
 
 unsafe extern "C" {
     fn dup(fd: i32) -> i32;
+}
+
+#[link(name = "dl")]
+unsafe extern "C" {
+    fn dlopen(name: *const std::ffi::c_char, flags: i32) -> *mut std::ffi::c_void;
+    fn dlsym(lib: *mut std::ffi::c_void, name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+}
+
+static PDFIUM: std::sync::OnceLock<Result<pdfium_write::Pdfium, String>> = std::sync::OnceLock::new();
+
+/// PDFium (libpdfium.so, packed into the app beside this library), loaded the first time it's
+/// needed: to write annotations into a PDF, or take them out. Reading never loads it.
+pub(crate) fn pdfium() -> Result<&'static pdfium_write::Pdfium, String> {
+    PDFIUM
+        .get_or_init(|| {
+            const RTLD_NOW: i32 = 2;
+            let lib = unsafe { dlopen(c"libpdfium.so".as_ptr(), RTLD_NOW) };
+            if lib.is_null() {
+                return Err("PDFium didn't load".to_owned());
+            }
+            let lookup = |name: &[u8]| unsafe { dlsym(lib, name.as_ptr().cast()) } as *const std::ffi::c_void;
+            // SAFETY: libpdfium.so is PDFium 7881 (third_party/pdfium/android), whose functions have the
+            // signatures pdfium-write expects
+            unsafe { pdfium_write::Pdfium::new(&lookup) }
+        })
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
 #[link(name = "log")]
@@ -76,6 +104,9 @@ pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_open(mut env: 
             return UNREADABLE;
         }
         let file = unsafe { File::from_raw_fd(copy) };
+        // another, kept to read the file again when annotations are written into it
+        let again = unsafe { dup(fd) };
+        let source = (again >= 0).then(|| unsafe { File::from_raw_fd(again) });
         // formats read by name (7-Zip comics) open it again through this
         let path = format!("/proc/self/fd/{fd}");
         let opened = engine::open_file(file, Path::new(&path), &password);
@@ -83,7 +114,9 @@ pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_open(mut env: 
             log(&format!("can't open the document: {e:?}"));
         }
         match opened {
-            Ok(engine) if engine.page_count() > 0 => Box::into_raw(Box::new(Viewer::new(engine, gap.max(0) as u32))) as jlong,
+            Ok(engine) if engine.page_count() > 0 => {
+                Box::into_raw(Box::new(Viewer::new(engine, gap.max(0) as u32, source, password.clone()))) as jlong
+            },
             Ok(_) => DAMAGED,
             Err(engine::OpenError::Unsupported) => UNSUPPORTED,
             Err(engine::OpenError::NeedsPassword) => NEEDS_PASSWORD,
@@ -342,4 +375,128 @@ fn thumbnail(engine: &dyn engine::Engine, path: &Path, width: u32) -> std::io::R
         encoder.write_header().and_then(|mut w| w.write_image_data(&rgb)).map_err(std::io::Error::other)?;
     }
     std::fs::rename(&part, path)
+}
+
+// Annotations
+
+/// Whether annotations can be made: the document is a PDF.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_annotatable(_: JNIEnv, _: JClass, h: jlong) -> jboolean {
+    if unsafe { viewer(h) }.annotatable() { JNI_TRUE } else { JNI_FALSE }
+}
+
+/// Highlights (0), underlines (1) or strikes out (2) the selected text in `color`, 0xRRGGBB.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_markSelection(_: JNIEnv, _: JClass, h: jlong, kind: jint, color: jint) -> jboolean {
+    if unsafe { viewer(h) }.mark_selection(kind.clamp(0, 2) as u8, color as u32 & 0xFF_FFFF) { JNI_TRUE } else { JNI_FALSE }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_penDown(_: JNIEnv, _: JClass, h: jlong, x: jfloat, y: jfloat, color: jint, width: jfloat) {
+    unsafe { viewer(h) }.pen_down(f64::from(x), f64::from(y), color as u32 & 0xFF_FFFF, width);
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_penMove(_: JNIEnv, _: JClass, h: jlong, x: jfloat, y: jfloat) {
+    unsafe { viewer(h) }.pen_move(f64::from(x), f64::from(y));
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_penUp(_: JNIEnv, _: JClass, h: jlong) {
+    unsafe { viewer(h) }.pen_up();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_penCancel(_: JNIEnv, _: JClass, h: jlong) {
+    unsafe { viewer(h) }.pen_cancel();
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_addNote(mut env: JNIEnv, _: JClass, h: jlong, x: jfloat, y: jfloat, text: JString, color: jint) -> jboolean {
+    let text = string(&mut env, &text);
+    if unsafe { viewer(h) }.add_note(f64::from(x), f64::from(y), &text, color as u32 & 0xFF_FFFF) { JNI_TRUE } else { JNI_FALSE }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_addRect(
+    _: JNIEnv,
+    _: JClass,
+    h: jlong,
+    x0: jfloat,
+    y0: jfloat,
+    x1: jfloat,
+    y1: jfloat,
+    color: jint,
+    width: jfloat,
+) -> jboolean {
+    let v = unsafe { viewer(h) };
+    if v.add_rect(f64::from(x0), f64::from(y0), f64::from(x1), f64::from(y1), color as u32 & 0xFF_FFFF, width) { JNI_TRUE } else { JNI_FALSE }
+}
+
+/// Erases what's at (x, y): 1 a mark made here, 2 an annotation of the PDF, 0 nothing, -1 failed.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_eraseAt(_: JNIEnv, _: JClass, h: jlong, x: jfloat, y: jfloat) -> jint {
+    match guard(Err("PDFium failed".to_owned()), || unsafe { viewer(h) }.erase_at(f64::from(x), f64::from(y))) {
+        Ok(n) => jint::from(n),
+        Err(e) => {
+            log(&format!("can't erase: {e}"));
+            -1
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_undo(_: JNIEnv, _: JClass, h: jlong) -> jboolean {
+    if guard(false, || unsafe { viewer(h) }.undo()) { JNI_TRUE } else { JNI_FALSE }
+}
+
+/// Whether there are changes not saved.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_changed(_: JNIEnv, _: JClass, h: jlong) -> jboolean {
+    if unsafe { viewer(h) }.changed() { JNI_TRUE } else { JNI_FALSE }
+}
+
+/// Makes the document with the changes made here written in, for `saveWrite`: before the file
+/// is opened to write, since opening it may empty it. Returns null, or what went wrong.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_savePrepare(mut env: JNIEnv, _: JClass, h: jlong) -> jstring {
+    let result = guard(Err("PDFium failed".to_owned()), || unsafe { viewer(h) }.prepare_save());
+    match result {
+        Ok(()) => std::ptr::null_mut(),
+        Err(e) => {
+            log(&format!("can't save: {e}"));
+            new_string(&mut env, &e)
+        }
+    }
+}
+
+/// Writes what `savePrepare` made into `fd`, a file the app opened for writing (and keeps). `same`
+/// says it's the document's own file: the changes are then done with. Returns null, or what went
+/// wrong.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_saveWrite(mut env: JNIEnv, _: JClass, h: jlong, fd: jint, same: jboolean) -> jstring {
+    let result = guard(Err("writing failed".to_owned()), || {
+        use std::io::Write;
+        let v = unsafe { viewer(h) };
+        let data = v.take_prepared().ok_or("nothing to save")?;
+        let copy = unsafe { dup(fd) };
+        if copy < 0 {
+            return Err(std::io::Error::last_os_error().to_string());
+        }
+        let mut out = unsafe { File::from_raw_fd(copy) };
+        // a file opened without truncating may be longer than what's written
+        let _ = out.set_len(0);
+        out.write_all(&data).and_then(|()| out.sync_all()).map_err(|e| e.to_string())?;
+        if same != JNI_FALSE {
+            v.saved_to_file(data)?;
+        }
+        Ok(())
+    });
+    match result {
+        Ok(()) => std::ptr::null_mut(),
+        Err(e) => {
+            log(&format!("can't save: {e}"));
+            new_string(&mut env, &e)
+        }
+    }
 }

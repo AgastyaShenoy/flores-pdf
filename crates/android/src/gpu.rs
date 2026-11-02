@@ -34,6 +34,7 @@ const GL_RGBA: u32 = 0x1908;
 const GL_UNSIGNED_BYTE: u32 = 0x1401;
 const GL_FLOAT: u32 = 0x1406;
 const GL_TRIANGLE_STRIP: u32 = 0x0005;
+const GL_TRIANGLE_FAN: u32 = 0x0006;
 const GL_VERTEX_SHADER: u32 = 0x8B31;
 const GL_FRAGMENT_SHADER: u32 = 0x8B30;
 const GL_COMPILE_STATUS: u32 = 0x8B81;
@@ -221,6 +222,41 @@ impl Gpu {
         }
     }
 
+    /// A line from `a` to `b`, `width` wide, with round ends so lines of several segments join
+    /// smoothly; blended over what's there unless `alpha` is 255.
+    pub fn line(&self, a: [f32; 2], b: [f32; 2], width: f32, color: u32, alpha: u32) {
+        let [r, g, bl] = rgb(color);
+        let half = (width / 2.0).max(0.5);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len = dx.hypot(dy);
+        unsafe {
+            glUseProgram(self.fill.id);
+            glUniform4f(self.fill.color, r, g, bl, alpha as f32 / 255.0);
+            if alpha < 255 {
+                glEnable(GL_BLEND);
+            }
+            if len > 0.0 {
+                let (nx, ny) = (-dy / len * half, dx / len * half);
+                let v = [a[0] + nx, a[1] + ny, a[0] - nx, a[1] - ny, b[0] + nx, b[1] + ny, b[0] - nx, b[1] - ny];
+                points(&self.fill, &v, GL_TRIANGLE_STRIP);
+            }
+            if half >= 1.0 {
+                for c in [a, b] {
+                    // a disc, as a fan of 12
+                    let mut v = vec![c[0], c[1]];
+                    for i in 0..=12 {
+                        let t = std::f32::consts::TAU * i as f32 / 12.0;
+                        v.extend([c[0] + half * t.cos(), c[1] + half * t.sin()]);
+                    }
+                    points(&self.fill, &v, GL_TRIANGLE_FAN);
+                }
+            }
+            if alpha < 255 {
+                glDisable(GL_BLEND);
+            }
+        }
+    }
+
     pub fn has(&self, key: &TileKey) -> bool {
         self.textures.contains_key(key)
     }
@@ -258,6 +294,18 @@ impl Gpu {
             glBindTexture(GL_TEXTURE_2D, t.id);
             quad(&self.image, x, y, width, height);
         }
+    }
+
+    /// Drops every texture: the document changed.
+    pub fn clear(&mut self) {
+        unsafe {
+            if eglMakeCurrent(self.display, self.surface, self.surface, self.context) == 0 {
+                return;
+            }
+            let ids: Vec<u32> = self.textures.drain().map(|(_, t)| t.id).collect();
+            glDeleteTextures(ids.len() as i32, ids.as_ptr());
+        }
+        self.bytes = 0;
     }
 
     /// Textures of `page` at scales other than `scale`, with their sizes, to stretch over tiles
@@ -311,6 +359,15 @@ fn fail<T>(what: &str) -> Option<T> {
 
 fn rgb(c: u32) -> [f32; 3] {
     [(c >> 16 & 0xFF) as f32 / 255.0, (c >> 8 & 0xFF) as f32 / 255.0, (c & 0xFF) as f32 / 255.0]
+}
+
+/// Triangles through `v` (x, y pairs), for the fill program.
+unsafe fn points(p: &Program, v: &[f32], mode: u32) {
+    unsafe {
+        glEnableVertexAttribArray(p.pos);
+        glVertexAttribPointer(p.pos, 2, GL_FLOAT, 0, 8, v.as_ptr().cast());
+        glDrawArrays(mode, 0, (v.len() / 2) as i32);
+    }
 }
 
 /// A rectangle, the whole texture stretched over it for the image program.
