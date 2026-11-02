@@ -261,9 +261,10 @@ An early Android version lives in `android/`, for Android 8 and later. It render
 - A start page with a picture of each recent file, which reopens where you left it; keep 10 to 50. Files shared from other apps for one use, as WhatsApp does, are kept as private copies so they reopen too.
 - Settings: System, Light, Dark or Black theme, page colors, keeping the screen on, and the volume keys turning pages.
 - Annotations in PDFs: highlight, underline and strike out text, draw, rectangles, notes, an eraser that also takes out annotations already in the file, and undo. Saving writes them into the PDF through PDFium (`third_party/pdfium/android`), or into a copy when the file's app doesn't let Flores write it.
+- PDF forms: text fields, check boxes, radio buttons and drop-downs, tinted so it's plain what can be filled in, filled through PDFium so every reader shows the entries, and saved like annotations.
 - Password-protected PDFs ask for the password. Document properties.
 
-Forms, text boxes, lines and arrows, and printing are Windows-only for now.
+Text boxes, lines and arrows, and printing are Windows-only for now.
 
 To build it you need the Android SDK and NDK (Android Studio installs both) and Rust's Android targets:
 

@@ -24,6 +24,8 @@ import android.widget.OverScroller
 class PageView(context: Context, private val listener: Listener) : SurfaceView(context), SurfaceHolder.Callback, Choreographer.FrameCallback {
 
     interface Listener {
+        /** A tap at (x, y), before links are looked for: true if it was used, on a form field say. */
+        fun onTapPage(x: Float, y: Float): Boolean
         /** A tap that hit no link. */
         fun onTap()
         fun onLink(uri: String)
@@ -154,6 +156,7 @@ class PageView(context: Context, private val listener: Listener) : SurfaceView(c
 
         override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
             if (handle == 0L) return false
+            if (listener.onTapPage(e.x, e.y)) return true
             when (val uri = Native.tap(handle, e.x, e.y)) {
                 null -> listener.onTap()
                 "" -> redraw()

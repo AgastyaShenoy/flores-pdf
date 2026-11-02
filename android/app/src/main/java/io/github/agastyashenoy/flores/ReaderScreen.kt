@@ -24,12 +24,15 @@ import android.widget.TextView
 import android.widget.Toast
 
 /** One document: the pages, a bar of tools above them and a page slider below, shown by a tap. */
-class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName: String?, private val shared: Boolean) : PageView.Listener {
+class ReaderScreen(private val a: MainActivity, uri: Uri, givenName: String?, private val shared: Boolean) : PageView.Listener {
+    /** The document: the file opened, or the private copy made of one shared for one use. */
+    var uri = uri
+        private set
     private val p = a.pal
     private val recents = a.recents
     /** The file's app no longer lets Flores read it. */
     private var denied = false
-    private val name = givenName ?: displayName(uri)
+    val name = givenName ?: displayName(uri)
 
     val view = FrameLayout(a)
     private val pages = PageView(a, this)
@@ -197,6 +200,8 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
                 null
             }
             val h = if (fd == null) Native.UNREADABLE else Native.open(fd.fd, password.orEmpty(), gap)
+            // a form's fields, read here while the file is opening, off the screen's thread
+            if (Native.isHandle(h)) Native.loadForm(h)
             a.runOnUiThread {
                 if (a.isDestroyed || !view.isAttachedToWindow) {
                     if (Native.isHandle(h)) Native.close(h)
@@ -292,6 +297,43 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
         }
         if (searching) showStatus()
         if (selecting) placeSelection(selectionBar.visibility == View.VISIBLE)
+    }
+
+    override fun onTapPage(x: Float, y: Float): Boolean {
+        val h = handle
+        if (h == 0L || annotating || selecting) return false
+        val f = Native.fieldAt(h, x, y)?.split('\t') ?: return false
+        if (f.size < 5) return false
+        editField(f[0].toInt(), f[1], f[2].replace("\\n", "\n"), f[3] == "1", f[4], f.drop(5))
+        return true
+    }
+
+    /** Fills in a form field: text in a dialog, a check box or radio button at once, a choice from
+     *  a list. */
+    private fun editField(index: Int, kind: String, value: String, checked: Boolean, name: String, choices: List<String>) {
+        val set = { v: String, on: Boolean ->
+            val error = Native.setField(handle, index, v, on)
+            if (error != null) Toast.makeText(a, "Flores PDF couldn't fill that in: $error", Toast.LENGTH_LONG).show()
+            pages.redraw()
+        }
+        // field names are often codes like "form1[0].name": the last part reads best
+        val title = name.substringAfterLast('.').replace(Regex("\\[\\d+]$"), "").ifBlank { "Field" }
+        when (kind) {
+            "check" -> set(value, !checked)
+            "radio" -> if (!checked) set(value, true)
+            "choice" -> {
+                val body = a.column()
+                for (c in choices) {
+                    val mark = if (c == value) a.icon(R.drawable.ic_check, p.accent) else null
+                    body.addView(a.listRow(p, 0, c.ifBlank { "(none)" }, end = mark) {
+                        a.panels.close()
+                        set(c, false)
+                    })
+                }
+                a.panels.show(body, title)
+            }
+            else -> a.ask(p, title, hint = "", initial = value, multiline = kind == "multiline", ok = "Done") { set(it, false) }
+        }
     }
 
     override fun onTap() {
@@ -578,7 +620,7 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
     fun confirmClose(then: () -> Unit) {
         val h = handle
         if (h == 0L || !Native.changed(h)) return then()
-        a.ask(p, "Save your annotations?", "$name has changes that aren't saved yet.", ok = "Save", other = "Discard", onOther = then) {
+        a.ask(p, "Save your changes?", "$name has annotations or form entries that aren't saved yet.", ok = "Save", other = "Discard", onOther = then) {
             save(then)
         }
     }
@@ -793,7 +835,7 @@ class ReaderScreen(private val a: MainActivity, private var uri: Uri, givenName:
                 startAnnotating()
             })
             if (Native.changed(handle)) {
-                body.addView(a.listRow(p, R.drawable.ic_save, "Save annotations") {
+                body.addView(a.listRow(p, R.drawable.ic_save, "Save changes") {
                     a.panels.close()
                     save()
                 })

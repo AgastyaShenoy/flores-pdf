@@ -59,7 +59,23 @@ class MainActivity : Activity() {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { back() }
         }
         show(start(), animate = false)
-        openIntent(intent)
+        val reopen = savedInstanceState?.getString(READING)
+        if (reopen != null) {
+            // Android started the screen again (a change it doesn't let the app take in place): the
+            // document comes back where it was, from the recent list
+            openReader(Uri.parse(reopen), savedInstanceState.getString(READING_NAME), shared = false)
+        } else {
+            openIntent(intent)
+        }
+    }
+
+    override fun onSaveInstanceState(out: Bundle) {
+        super.onSaveInstanceState(out)
+        reader?.let {
+            it.remember()
+            out.putString(READING, it.uri.toString())
+            out.putString(READING_NAME, it.name)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -286,6 +302,8 @@ class MainActivity : Activity() {
     companion object {
         private const val PICK = 1
         private const val CREATE = 2
+        private const val READING = "reading"
+        private const val READING_NAME = "reading_name"
         private val MIME_TYPES = arrayOf(
             "application/pdf", "application/epub+zip", "image/vnd.djvu", "image/x-djvu",
             "application/vnd.comicbook+zip", "application/x-cbz", "application/x-cb7", "application/zip",

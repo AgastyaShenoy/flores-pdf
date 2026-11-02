@@ -21,6 +21,8 @@ const CACHE_SCREENS: usize = 2;
 const MATCH_TINT: (u32, u32) = (0x00FF_D400, 110);
 const CURRENT_TINT: (u32, u32) = (0x00FF_7A00, 150);
 const SELECTION_TINT: (u32, u32) = (0x0033_8CFF, 90);
+/// Form fields, so it's plain what can be filled in.
+const FIELD_TINT: (u32, u32) = (0x0033_8CFF, 34);
 /// Places kept for going back after following a link.
 const BACK: usize = 50;
 /// Where the engine failed on a tile. As on Windows.
@@ -119,6 +121,8 @@ pub struct Viewer {
     undo: Vec<Undo>,
     /// The document made for saving, between preparing and writing it.
     prepared: Option<Vec<u8>>,
+    /// The form's fields, read by PDFium when the document opens, with their values as filled here.
+    fields: Vec<pdfium_write::Field>,
 }
 
 impl Viewer {
@@ -165,6 +169,7 @@ impl Viewer {
             stroke: None,
             undo: Vec::new(),
             prepared: None,
+            fields: Vec::new(),
         }
     }
 
@@ -722,6 +727,13 @@ impl Viewer {
             let (x, y) = self.to_doc(page, p[0], p[1]);
             [(x - view.x as f64) as f32, (y - view.y as f64) as f32]
         };
+        for f in self.fields.iter().filter(|f| pages.contains(&f.page)) {
+            let r = self.field_rect(f);
+            let (x0, y0, x1, y1) = self.rect_to_doc(f.page, &r);
+            let (x0, y0) = ((x0 - view.x as f64) as f32, (y0 - view.y as f64) as f32);
+            let (x1, y1) = ((x1 - view.x as f64) as f32, (y1 - view.y as f64) as f32);
+            gpu.fill(x0, y0, x1 - x0, y1 - y0, FIELD_TINT.0, FIELD_TINT.1);
+        }
         for m in self.marks.iter().chain(&self.stroke).filter(|m| pages.contains(&m.page)) {
             for piece in m.pieces() {
                 match piece {
@@ -863,6 +875,10 @@ impl Viewer {
                     return false;
                 }
                 self.edited = true;
+                // a field filled in may have gone back to what it was
+                if !self.fields.is_empty() {
+                    let _ = self.load_form();
+                }
             }
             None => return false,
         }
@@ -949,6 +965,71 @@ impl Viewer {
         }
         self.working = Some(data);
         self.dirty = true;
+        Ok(())
+    }
+
+    // Forms
+
+    /// Reads the form's fields through PDFium, if the document has a form. Returns how many there are.
+    pub fn load_form(&mut self) -> Result<usize, String> {
+        if !self.engine.has_form() {
+            return Ok(0);
+        }
+        let data = self.bytes()?;
+        self.fields = crate::pdfium()?.read_fields(&data, Some(&self.password))?;
+        self.dirty = true;
+        Ok(self.fields.len())
+    }
+
+    /// A field's rectangle in points from its page's top-left corner, from the page's own
+    /// coordinates.
+    fn field_rect(&self, f: &pdfium_write::Field) -> [f32; 4] {
+        let Some(t) = self.engine.page_transform(f.page) else { return f.rect };
+        let map = |x: f32, y: f32| {
+            let (x, y) = (f64::from(x), f64::from(y));
+            ((t[0] * x + t[2] * y + t[4]) as f32, (t[1] * x + t[3] * y + t[5]) as f32)
+        };
+        let (a, b) = (map(f.rect[0], f.rect[1]), map(f.rect[2], f.rect[3]));
+        [a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1)]
+    }
+
+    /// The field under (x, y) in the view, by its place in the list.
+    pub fn field_at(&self, x: f64, y: f64) -> Option<usize> {
+        let (page, px, py) = self.page_point(x, y)?;
+        // a little slack around small check boxes, for fingers
+        let slack = (4.0 / self.layout.scale).max(1.0);
+        self.fields.iter().rposition(|f| {
+            let r = self.field_rect(f);
+            f.page == page && px >= r[0] - slack && px <= r[2] + slack && py >= r[1] - slack && py <= r[3] + slack
+        })
+    }
+
+    pub fn field(&self, i: usize) -> Option<&pdfium_write::Field> {
+        self.fields.get(i)
+    }
+
+    /// Fills in field `i` with `value`, or checks it: through PDFium, as typing or clicking would,
+    /// so it gets an appearance every reader shows. The page is drawn again with it.
+    pub fn set_field(&mut self, i: usize, value: &str, checked: bool) -> Result<(), String> {
+        let mut f = self.fields.get(i).ok_or("no such field")?.clone();
+        if f.value == value && f.checked == checked {
+            return Ok(());
+        }
+        f.value = value.to_owned();
+        f.checked = checked;
+        let before = self.bytes()?;
+        let changes = pdfium_write::Changes { fields: std::slice::from_ref(&f), ..Default::default() };
+        let after = crate::pdfium()?.apply(&before, Some(&self.password), &changes)?;
+        self.reload(after)?;
+        self.edited = true;
+        self.push_undo(Undo::Rewrote(before));
+        // a radio button checked unchecks the others of its group
+        if f.kind == pdfium_write::FieldKind::Radio && checked {
+            for other in self.fields.iter_mut().filter(|o| o.name == f.name) {
+                other.checked = false;
+            }
+        }
+        self.fields[i] = f;
         Ok(())
     }
 

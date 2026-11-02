@@ -500,3 +500,54 @@ pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_saveWrite(mut 
         }
     }
 }
+
+// Forms
+
+/// Reads the form's fields, if the document has a form: call it once, after `open` and before the
+/// document is shown (it may take a moment). Returns how many fields there are.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_loadForm(_: JNIEnv, _: JClass, h: jlong) -> jint {
+    match guard(Err("PDFium failed".to_owned()), || unsafe { viewer(h) }.load_form()) {
+        Ok(n) => n as jint,
+        Err(e) => {
+            log(&format!("can't read the form: {e}"));
+            0
+        }
+    }
+}
+
+/// The field at (x, y): index, kind (text, multiline, check, radio, choice), value, checked (0 or 1),
+/// name, then the choices, tab-separated; null where there's none.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_fieldAt(mut env: JNIEnv, _: JClass, h: jlong, x: jfloat, y: jfloat) -> jstring {
+    let v = unsafe { viewer(h) };
+    let Some(i) = v.field_at(f64::from(x), f64::from(y)) else { return std::ptr::null_mut() };
+    let Some(f) = v.field(i) else { return std::ptr::null_mut() };
+    let clean = |s: &str| s.replace(['\t', '\n'], " ");
+    let (kind, choices) = match &f.kind {
+        pdfium_write::FieldKind::Text { multiline: false } => ("text", Vec::new()),
+        pdfium_write::FieldKind::Text { multiline: true } => ("multiline", Vec::new()),
+        pdfium_write::FieldKind::Check => ("check", Vec::new()),
+        pdfium_write::FieldKind::Radio => ("radio", Vec::new()),
+        pdfium_write::FieldKind::Choice(options) => ("choice", options.iter().map(|o| clean(o)).collect()),
+    };
+    // a multiline value keeps its line breaks, as \n written out
+    let value = f.value.replace('\t', " ").replace('\n', "\\n");
+    let mut line = vec![i.to_string(), kind.to_owned(), value, (f.checked as u8).to_string(), clean(&f.name)];
+    line.extend(choices);
+    new_string(&mut env, &line.join("\t"))
+}
+
+/// Fills in field `index` with `value`, or checks it. Returns null, or what went wrong.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_agastyashenoy_flores_Native_setField(mut env: JNIEnv, _: JClass, h: jlong, index: jint, value: JString, checked: jboolean) -> jstring {
+    let value = string(&mut env, &value);
+    let result = guard(Err("PDFium failed".to_owned()), || unsafe { viewer(h) }.set_field(index.max(0) as usize, &value, checked != JNI_FALSE));
+    match result {
+        Ok(()) => std::ptr::null_mut(),
+        Err(e) => {
+            log(&format!("can't fill in the field: {e}"));
+            new_string(&mut env, &e)
+        }
+    }
+}

@@ -97,6 +97,16 @@ object Native {
     /** Writes it into [fd]; [same]: the document's own file. Null, or what went wrong. */
     @JvmStatic external fun saveWrite(h: Long, fd: Int, same: Boolean): String?
 
+    // Forms, filled in through PDFium, as on Windows.
+
+    /** Reads the form's fields, once, before the document shows; how many there are. */
+    @JvmStatic external fun loadForm(h: Long): Int
+    /** The field at (x, y): index, kind (text, multiline, check, radio, choice), value, checked
+     *  (0 or 1), name, then the choices, tab-separated; null where there's none. */
+    @JvmStatic external fun fieldAt(h: Long, x: Float, y: Float): String?
+    /** Fills in field [index] with [value], or checks it; null, or what went wrong. */
+    @JvmStatic external fun setField(h: Long, index: Int, value: String, checked: Boolean): String?
+
     @JvmStatic external fun search(h: Long, query: String)
     /** Matches found, pages searched, pages, current match (-1 for none). */
     @JvmStatic external fun searchStatus(h: Long): IntArray

@@ -375,6 +375,7 @@ fun Activity.ask(
     initial: String = "",
     number: Boolean = false,
     password: Boolean = false,
+    multiline: Boolean = false,
     ok: String,
     other: String? = null,
     onOther: (() -> Unit)? = null,
@@ -396,12 +397,18 @@ fun Activity.ask(
             setHintTextColor(p.muted)
             setTextColor(p.text)
             textSize = 16f
-            isSingleLine = true
+            isSingleLine = !multiline
+            if (multiline) {
+                minLines = 3
+                maxLines = 8
+                gravity = Gravity.TOP or Gravity.START
+            }
             setText(initial)
             setSelectAllOnFocus(true)
             inputType = when {
                 number -> InputType.TYPE_CLASS_NUMBER
                 password -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                multiline -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             }
             imeOptions = EditorInfo.IME_ACTION_DONE
@@ -429,7 +436,8 @@ fun Activity.ask(
     buttons.addView(button(p, "Cancel", Kind.Ghost) { d.cancel() })
     buttons.addView(button(p, ok, Kind.Primary) { confirm() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(8f) })
     box.addView(buttons, lp(top = dp(24f)))
-    field?.setOnEditorActionListener { _, _, _ ->
+    // Enter starts a new line in a box of several, else it's OK
+    if (!multiline) field?.setOnEditorActionListener { _, _, _ ->
         confirm()
         true
     }
