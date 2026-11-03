@@ -517,7 +517,7 @@ checksum = "edf234dd1594d6dd434a8fb8cada51ddbbc593e40e4a01556a0b31c62da2775b"
 
 [[package]]
 name = "engine"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bytemuck",
  "djvu-rs",
@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "flores-pdf"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "engine",
  "kurbo",
@@ -627,7 +627,7 @@ dependencies = [
 
 [[package]]
 name = "flores-setup"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "miniz_oxide 0.8.9",
  "windows-sys 0.59.0",
@@ -1739,7 +1739,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "render"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "engine",
 ]
