@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only the platform's theme: the screens color themselves from the app's palette (Kit.kt). -->
+    <style name="Theme.Flores" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#0E7C7B</item>
+        <item name="android:windowBackground">#F3F4F3</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

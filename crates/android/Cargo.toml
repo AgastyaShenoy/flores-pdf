@@ -1,0 +1,23 @@
+[package]
+name = "flores-android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# libflores.so, loaded by the Android app in android/. Built by android/build-rust.ps1; on other
+# targets the library is empty.
+[lib]
+name = "flores"
+crate-type = ["cdylib"]
+
+[dependencies]
+engine.workspace = true
+render.workspace = true
+# writing annotations into PDFs, through the libpdfium.so packed beside this library
+pdfium-write.workspace = true
+# thumbnails for the start page: the version vello_cpu already pulls in
+png = "0.18.1"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", default-features = false }

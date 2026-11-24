@@ -1,0 +1,10 @@
+[package]
+name = "pdfium-write"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# PDFium for filling in forms and writing annotations into PDFs, shared by the Windows and Android
+# apps. No dependencies: each app loads the library and hands its functions over.
+[dependencies]

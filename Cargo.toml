@@ -12,6 +12,7 @@ license = "MIT"
 [workspace.dependencies]
 engine = { path = "crates/engine" }
 render = { path = "crates/render" }
+pdfium-write = { path = "crates/pdfium-write" }
 memmap2 = "0.9"
 softbuffer = "0.4.8"
 winit = "0.30"

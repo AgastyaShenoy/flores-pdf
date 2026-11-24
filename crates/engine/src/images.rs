@@ -26,6 +26,7 @@ pub(crate) enum Source {
     /// A zip entry: where its data starts, its sizes, and whether it's deflated.
     Entry { offset: usize, size: usize, deflated: bool },
     /// A RAR entry, by name: UnRAR reads archives from their file, from the start.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     Rar(String),
     /// A 7-Zip entry, by name, read from the archive's file.
     SevenZip(String),
@@ -83,7 +84,14 @@ impl ImageEngine {
         Ok(Self { bytes, rar: None, pages, format: "CBZ comic", decoded: Mutex::new(Vec::new()) })
     }
 
+    /// A RAR of page images. Not on Android: UnRAR's build script compiles for the system it runs on.
+    #[cfg(target_os = "android")]
+    pub(crate) fn rar(_: &Path) -> Result<Self, OpenError> {
+        Err(OpenError::Unsupported)
+    }
+
     /// A RAR of page images. Opening reads each image once, for its size.
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn rar(path: &Path) -> Result<Self, OpenError> {
         let mut archive = unrar::Archive::new(path).open_for_processing().map_err(|_| OpenError::Damaged)?;
         let mut pages = Vec::new();
@@ -139,6 +147,7 @@ impl ImageEngine {
                 let mut archive = sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty()).ok()?;
                 archive.read_file(name).ok()
             }
+            #[cfg(not(target_os = "android"))]
             (Source::Rar(name), Some(path)) => {
                 let mut archive = unrar::Archive::new(path).open_for_processing().ok()?;
                 while let Some(header) = archive.read_header().ok()? {

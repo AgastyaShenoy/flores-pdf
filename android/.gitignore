@@ -1,0 +1,7 @@
+.gradle/
+build/
+app/build/
+local.properties
+.kotlin/
+# built by build-rust.ps1
+app/src/main/jniLibs/

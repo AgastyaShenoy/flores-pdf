@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the launcher icon's tile: the Windows icon's sea teal -->
+    <color name="icon_background">#0E7C7B</color>
+</resources>
